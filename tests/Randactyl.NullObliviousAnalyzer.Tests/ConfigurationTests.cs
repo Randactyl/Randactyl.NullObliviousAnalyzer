@@ -1,6 +1,5 @@
 using System.Threading.Tasks;
 using Randactyl.NullObliviousAnalyzer.Testing;
-using TUnit.Core;
 
 namespace Randactyl.NullObliviousAnalyzer.Tests;
 
@@ -19,7 +18,11 @@ public class ConfigurationTests
         const string source = """
             class C { void M(Lib lib) { var a = lib.GetFoo(); var b = lib.Field; } }
             """;
-        return AnalyzerVerifier.VerifyAsync(source, Libs.Oblivious, o => o.EditorConfig = "null_oblivious_analyzer.excluded_assemblies = ObliviousLib");
+        return AnalyzerVerifier.VerifyAsync(
+            source,
+            Libs.Oblivious,
+            o => o.EditorConfig = "null_oblivious_analyzer.excluded_assemblies = ObliviousLib"
+        );
     }
 
     [Test]
@@ -28,7 +31,13 @@ public class ConfigurationTests
         const string source = """
             class C { void M(Lib lib) { var a = lib.GetFoo(); } }
             """;
-        return AnalyzerVerifier.VerifyAsync(source, Libs.Oblivious, o => o.EditorConfig = "null_oblivious_analyzer.excluded_assemblies =  System.* ,  Oblivious* ");
+        return AnalyzerVerifier.VerifyAsync(
+            source,
+            Libs.Oblivious,
+            o =>
+                o.EditorConfig =
+                    "null_oblivious_analyzer.excluded_assemblies =  System.* ,  Oblivious* "
+        );
     }
 
     [Test]
@@ -37,7 +46,11 @@ public class ConfigurationTests
         const string source = """
             class C { void M(Lib lib) { var a = {|NOA001:lib.GetFoo()|}; } }
             """;
-        return AnalyzerVerifier.VerifyAsync(source, Libs.Oblivious, o => o.EditorConfig = "null_oblivious_analyzer.excluded_assemblies = Obliviou, Other.*");
+        return AnalyzerVerifier.VerifyAsync(
+            source,
+            Libs.Oblivious,
+            o => o.EditorConfig = "null_oblivious_analyzer.excluded_assemblies = Obliviou, Other.*"
+        );
     }
 
     [Test]
@@ -46,7 +59,11 @@ public class ConfigurationTests
         const string source = """
             class C { void M(Lib lib) { var a = lib.GetFoo(); } }
             """;
-        return AnalyzerVerifier.VerifyAsync(source, Libs.Oblivious, o => o.GlobalConfig = "null_oblivious_analyzer.excluded_assemblies = ObliviousLib");
+        return AnalyzerVerifier.VerifyAsync(
+            source,
+            Libs.Oblivious,
+            o => o.GlobalConfig = "null_oblivious_analyzer.excluded_assemblies = ObliviousLib"
+        );
     }
 
     [Test]
@@ -63,7 +80,11 @@ public class ConfigurationTests
                 }
             }
             """;
-        return AnalyzerVerifier.VerifyAsync(source, Vendor, o => o.EditorConfig = "null_oblivious_analyzer.excluded_namespaces = Vendor");
+        return AnalyzerVerifier.VerifyAsync(
+            source,
+            Vendor,
+            o => o.EditorConfig = "null_oblivious_analyzer.excluded_namespaces = Vendor"
+        );
     }
 
     [Test]
@@ -79,7 +100,11 @@ public class ConfigurationTests
                 }
             }
             """;
-        return AnalyzerVerifier.VerifyAsync(source, Vendor, o => o.EditorConfig = "null_oblivious_analyzer.excluded_namespaces = Vendor.Inner");
+        return AnalyzerVerifier.VerifyAsync(
+            source,
+            Vendor,
+            o => o.EditorConfig = "null_oblivious_analyzer.excluded_namespaces = Vendor.Inner"
+        );
     }
 
     [Test]
@@ -90,7 +115,11 @@ public class ConfigurationTests
             using System.Linq;
             class C { void M(Vendor.Holder h) { var a = {|NOA008:h.Items.ToArray()|}; } }
             """;
-        return AnalyzerVerifier.VerifyAsync(source, Vendor, o => o.EditorConfig = "null_oblivious_analyzer.excluded_namespaces = Vendor, Other");
+        return AnalyzerVerifier.VerifyAsync(
+            source,
+            Vendor,
+            o => o.EditorConfig = "null_oblivious_analyzer.excluded_namespaces = Vendor, Other"
+        );
     }
 
     [Test]
@@ -100,7 +129,13 @@ public class ConfigurationTests
             using System.Linq;
             class C { void M(Lib lib) { var a = lib.Items.ToArray(); } }
             """;
-        return AnalyzerVerifier.VerifyAsync(source, Libs.Oblivious, o => o.EditorConfig = "null_oblivious_analyzer.excluded_assemblies = System.*, ObliviousLib");
+        return AnalyzerVerifier.VerifyAsync(
+            source,
+            Libs.Oblivious,
+            o =>
+                o.EditorConfig =
+                    "null_oblivious_analyzer.excluded_assemblies = System.*, ObliviousLib"
+        );
     }
 
     [Test]
@@ -109,7 +144,11 @@ public class ConfigurationTests
         const string source = """
             class Impl : BaseWithParams { public override void Take(Foo f, int n) { } }
             """;
-        return AnalyzerVerifier.VerifyAsync(source, Libs.Oblivious, o => o.EditorConfig = "null_oblivious_analyzer.excluded_assemblies = ObliviousLib");
+        return AnalyzerVerifier.VerifyAsync(
+            source,
+            Libs.Oblivious,
+            o => o.EditorConfig = "null_oblivious_analyzer.excluded_assemblies = ObliviousLib"
+        );
     }
 
     private const string VendorSource = """
@@ -143,7 +182,11 @@ public class ConfigurationTests
         const string source = """
             class C { void M(Lib lib) { var arr = lib.Array; foreach (var e in arr) { } } }
             """;
-        return AnalyzerVerifier.VerifyAsync(source, Libs.Oblivious, o => o.EditorConfig = ExcludeLib);
+        return AnalyzerVerifier.VerifyAsync(
+            source,
+            Libs.Oblivious,
+            o => o.EditorConfig = ExcludeLib
+        );
     }
 
     [Test]
@@ -152,7 +195,11 @@ public class ConfigurationTests
         const string source = """
             class C { void M(Lib lib) { var arr = lib.Array; var x = arr[0]; } }
             """;
-        return AnalyzerVerifier.VerifyAsync(source, Libs.Oblivious, o => o.EditorConfig = ExcludeLib);
+        return AnalyzerVerifier.VerifyAsync(
+            source,
+            Libs.Oblivious,
+            o => o.EditorConfig = ExcludeLib
+        );
     }
 
     [Test]
@@ -162,7 +209,11 @@ public class ConfigurationTests
             using System.Collections.Generic;
             class C { void M(Lib lib) { var items = lib.Items; List<Foo> copy = [.. items]; } }
             """;
-        return AnalyzerVerifier.VerifyAsync(source, Libs.Oblivious, o => o.EditorConfig = ExcludeLib);
+        return AnalyzerVerifier.VerifyAsync(
+            source,
+            Libs.Oblivious,
+            o => o.EditorConfig = ExcludeLib
+        );
     }
 
     [Test]
@@ -171,7 +222,11 @@ public class ConfigurationTests
         const string source = """
             class C { async System.Threading.Tasks.Task M(Lib lib) { var t = lib.GetFooAsync(); var f = await t; } }
             """;
-        return AnalyzerVerifier.VerifyAsync(source, Libs.Oblivious, o => o.EditorConfig = ExcludeLib);
+        return AnalyzerVerifier.VerifyAsync(
+            source,
+            Libs.Oblivious,
+            o => o.EditorConfig = ExcludeLib
+        );
     }
 
     [Test]
@@ -189,7 +244,11 @@ public class ConfigurationTests
                 }
             }
             """;
-        return AnalyzerVerifier.VerifyAsync(source, Libs.Oblivious, o => o.EditorConfig = ExcludeLib);
+        return AnalyzerVerifier.VerifyAsync(
+            source,
+            Libs.Oblivious,
+            o => o.EditorConfig = ExcludeLib
+        );
     }
 
     [Test]
@@ -198,7 +257,11 @@ public class ConfigurationTests
         const string source = """
             class C { async System.Threading.Tasks.Task M(Registry registry) { var arr = await registry.LoadAsync(); var x = arr[0]; } }
             """;
-        return AnalyzerVerifier.VerifyAsync(source, Libs.Oblivious + ArrayCallback, o => o.EditorConfig = ExcludeLib);
+        return AnalyzerVerifier.VerifyAsync(
+            source,
+            Libs.Oblivious + ArrayCallback,
+            o => o.EditorConfig = ExcludeLib
+        );
     }
 
     [Test]
@@ -207,7 +270,11 @@ public class ConfigurationTests
         const string source = """
             class C { void M(Vendor.Source s) { var arr = s.Names; foreach (var e in arr) { } } }
             """;
-        return AnalyzerVerifier.VerifyAsync(source, VendorSource, o => o.EditorConfig = ExcludeVendor);
+        return AnalyzerVerifier.VerifyAsync(
+            source,
+            VendorSource,
+            o => o.EditorConfig = ExcludeVendor
+        );
     }
 
     [Test]
@@ -216,7 +283,11 @@ public class ConfigurationTests
         const string source = """
             class C { void M(Vendor.Source s) { var arr = s.Names; var x = arr[0]; } }
             """;
-        return AnalyzerVerifier.VerifyAsync(source, VendorSource, o => o.EditorConfig = ExcludeVendor);
+        return AnalyzerVerifier.VerifyAsync(
+            source,
+            VendorSource,
+            o => o.EditorConfig = ExcludeVendor
+        );
     }
 
     [Test]
@@ -226,7 +297,11 @@ public class ConfigurationTests
             using System.Collections.Generic;
             class C { void M(Vendor.Source s) { var items = s.Items; List<string> copy = [.. items]; } }
             """;
-        return AnalyzerVerifier.VerifyAsync(source, VendorSource, o => o.EditorConfig = ExcludeVendor);
+        return AnalyzerVerifier.VerifyAsync(
+            source,
+            VendorSource,
+            o => o.EditorConfig = ExcludeVendor
+        );
     }
 
     [Test]
@@ -235,7 +310,11 @@ public class ConfigurationTests
         const string source = """
             class C { async System.Threading.Tasks.Task M(Vendor.Source s) { var t = s.GetAsync(); var v = await t; } }
             """;
-        return AnalyzerVerifier.VerifyAsync(source, VendorSource, o => o.EditorConfig = ExcludeVendor);
+        return AnalyzerVerifier.VerifyAsync(
+            source,
+            VendorSource,
+            o => o.EditorConfig = ExcludeVendor
+        );
     }
 
     [Test]
@@ -253,7 +332,11 @@ public class ConfigurationTests
                 }
             }
             """;
-        return AnalyzerVerifier.VerifyAsync(source, Libs.Oblivious, o => o.EditorConfig = ExcludeLib);
+        return AnalyzerVerifier.VerifyAsync(
+            source,
+            Libs.Oblivious,
+            o => o.EditorConfig = ExcludeLib
+        );
     }
 
     [Test]
@@ -262,7 +345,11 @@ public class ConfigurationTests
         const string source = """
             class C { void M(Registry registry) { registry.On(arr => { foreach (var {|NOA005:e|} in arr) { } }); } }
             """;
-        return AnalyzerVerifier.VerifyAsync(source, Libs.Oblivious + ArrayCallback, o => o.EditorConfig = ExcludeLib);
+        return AnalyzerVerifier.VerifyAsync(
+            source,
+            Libs.Oblivious + ArrayCallback,
+            o => o.EditorConfig = ExcludeLib
+        );
     }
 
     [Test]
@@ -276,9 +363,34 @@ public class ConfigurationTests
             """;
         const string config = "null_oblivious_analyzer.excluded_assemblies = System.*";
         return Task.WhenAll(
-            AnalyzerVerifier.VerifyAsync(source, Libs.Oblivious, o => { o.ObliviousLibraryName = "System"; o.EditorConfig = config; }),
-            AnalyzerVerifier.VerifyAsync(source, Libs.Oblivious, o => { o.ObliviousLibraryName = "System.Xml"; o.EditorConfig = config; }),
-            AnalyzerVerifier.VerifyAsync(reported, Libs.Oblivious, o => { o.ObliviousLibraryName = "SystemFoo"; o.EditorConfig = config; }));
+            AnalyzerVerifier.VerifyAsync(
+                source,
+                Libs.Oblivious,
+                o =>
+                {
+                    o.ObliviousLibraryName = "System";
+                    o.EditorConfig = config;
+                }
+            ),
+            AnalyzerVerifier.VerifyAsync(
+                source,
+                Libs.Oblivious,
+                o =>
+                {
+                    o.ObliviousLibraryName = "System.Xml";
+                    o.EditorConfig = config;
+                }
+            ),
+            AnalyzerVerifier.VerifyAsync(
+                reported,
+                Libs.Oblivious,
+                o =>
+                {
+                    o.ObliviousLibraryName = "SystemFoo";
+                    o.EditorConfig = config;
+                }
+            )
+        );
     }
 
     [Test]
@@ -289,8 +401,25 @@ public class ConfigurationTests
             """;
         const string config = "null_oblivious_analyzer.excluded_assemblies = Sys*";
         return Task.WhenAll(
-            AnalyzerVerifier.VerifyAsync(source, Libs.Oblivious, o => { o.ObliviousLibraryName = "SystemFoo"; o.EditorConfig = config; }),
-            AnalyzerVerifier.VerifyAsync(source, Libs.Oblivious, o => { o.ObliviousLibraryName = "System"; o.EditorConfig = config; }));
+            AnalyzerVerifier.VerifyAsync(
+                source,
+                Libs.Oblivious,
+                o =>
+                {
+                    o.ObliviousLibraryName = "SystemFoo";
+                    o.EditorConfig = config;
+                }
+            ),
+            AnalyzerVerifier.VerifyAsync(
+                source,
+                Libs.Oblivious,
+                o =>
+                {
+                    o.ObliviousLibraryName = "System";
+                    o.EditorConfig = config;
+                }
+            )
+        );
     }
 
     [Test]
@@ -300,8 +429,17 @@ public class ConfigurationTests
             class C { void M(Lib lib) { var a = lib.GetFoo(); } }
             """;
         return Task.WhenAll(
-            AnalyzerVerifier.VerifyAsync(source, Libs.Oblivious, o => o.EditorConfig = "null_oblivious_analyzer.excluded_assemblies = obliviouslib"),
-            AnalyzerVerifier.VerifyAsync(source, Libs.Oblivious, o => o.EditorConfig = "null_oblivious_analyzer.excluded_assemblies = OBLIVIOUS*"));
+            AnalyzerVerifier.VerifyAsync(
+                source,
+                Libs.Oblivious,
+                o => o.EditorConfig = "null_oblivious_analyzer.excluded_assemblies = obliviouslib"
+            ),
+            AnalyzerVerifier.VerifyAsync(
+                source,
+                Libs.Oblivious,
+                o => o.EditorConfig = "null_oblivious_analyzer.excluded_assemblies = OBLIVIOUS*"
+            )
+        );
     }
 
     [Test]
@@ -319,8 +457,17 @@ public class ConfigurationTests
             }
             """;
         return Task.WhenAll(
-            AnalyzerVerifier.VerifyAsync(source, Vendor, o => o.EditorConfig = "null_oblivious_analyzer.excluded_namespaces = vendor"),
-            AnalyzerVerifier.VerifyAsync(source, Vendor, o => o.EditorConfig = "null_oblivious_analyzer.excluded_namespaces = VENDOR.*"));
+            AnalyzerVerifier.VerifyAsync(
+                source,
+                Vendor,
+                o => o.EditorConfig = "null_oblivious_analyzer.excluded_namespaces = vendor"
+            ),
+            AnalyzerVerifier.VerifyAsync(
+                source,
+                Vendor,
+                o => o.EditorConfig = "null_oblivious_analyzer.excluded_namespaces = VENDOR.*"
+            )
+        );
     }
 
     [Test]
@@ -329,7 +476,11 @@ public class ConfigurationTests
         const string source = """
             class C { void M(Vendor.Top b) { var y = {|NOA001:b.Get()|}; } }
             """;
-        return AnalyzerVerifier.VerifyAsync(source, Vendor, o => o.EditorConfig = "null_oblivious_analyzer.excluded_namespaces = Ven*");
+        return AnalyzerVerifier.VerifyAsync(
+            source,
+            Vendor,
+            o => o.EditorConfig = "null_oblivious_analyzer.excluded_namespaces = Ven*"
+        );
     }
 
     [Test]
@@ -338,6 +489,10 @@ public class ConfigurationTests
         const string source = """
             class C { void M(Vendor.Top b, Vendor.Inner.Thing t, Other.Else c) { var x = b.Get(); var y = t.Get(); var z = {|NOA001:c.Get()|}; } }
             """;
-        return AnalyzerVerifier.VerifyAsync(source, Vendor, o => o.EditorConfig = "null_oblivious_analyzer.excluded_namespaces = Vendor.*");
+        return AnalyzerVerifier.VerifyAsync(
+            source,
+            Vendor,
+            o => o.EditorConfig = "null_oblivious_analyzer.excluded_namespaces = Vendor.*"
+        );
     }
 }

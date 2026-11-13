@@ -1,6 +1,5 @@
 using System.Threading.Tasks;
 using Randactyl.NullObliviousAnalyzer.Testing;
-using TUnit.Core;
 
 namespace Randactyl.NullObliviousAnalyzer.Tests;
 
@@ -208,11 +207,14 @@ public class CallResultTests
         const string source = """
             class C { void M(Lib lib) { var a = lib.GetFoo(); } }
             """;
-        return AnalyzerVerifier.VerifyAsync(source, o =>
-        {
-            o.ObliviousLibrarySource = Libs.Oblivious;
-            o.FileName = "/0/Thing.g.cs";
-        });
+        return AnalyzerVerifier.VerifyAsync(
+            source,
+            o =>
+            {
+                o.ObliviousLibrarySource = Libs.Oblivious;
+                o.FileName = "/0/Thing.g.cs";
+            }
+        );
     }
 
     [Test]

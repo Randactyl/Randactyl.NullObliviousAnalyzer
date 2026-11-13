@@ -1,6 +1,5 @@
 using System.Threading.Tasks;
 using Randactyl.NullObliviousAnalyzer.Testing;
-using TUnit.Core;
 
 namespace Randactyl.NullObliviousAnalyzer.Tests;
 
