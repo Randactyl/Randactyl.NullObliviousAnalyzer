@@ -342,7 +342,7 @@ Two things to know when the tests run:
 
 ## Two test projects
 
-The same 123 tests exist for xUnit v3 (`tests/Randactyl.NullObliviousAnalyzer.Tests.XUnit`) and for TUnit (`tests/Randactyl.NullObliviousAnalyzer.Tests.TUnit`), as a comparison. [docs/experiments/xunit-vs-tunit.md](docs/experiments/xunit-vs-tunit.md) recommends keeping xUnit v3, and the owner decides which project to keep. Its three verdicts: performance is a tie, because about 98% of the time is the shared Roslyn work; generated code goes clearly to xUnit, since TUnit generates 3,006 lines in 16 files and a 2.4 times larger output folder; documentation goes to TUnit, which scored 27 against 20 out of 30 on ten tasks.
+The same 123 tests exist for xUnit v3 (`tests/Randactyl.NullObliviousAnalyzer.Tests.XUnit`) and for TUnit (`tests/Randactyl.NullObliviousAnalyzer.Tests.TUnit`), as a comparison. [docs/experiments/xunit-vs-tunit.md](docs/experiments/xunit-vs-tunit.md) recommends TUnit, narrowly and with low confidence, and the owner decides which project to keep. Its three verdicts: performance is a tie, because about 98% of the time is the shared Roslyn work; the code you write goes to TUnit by a small margin (12 test scenarios written once per framework in `experiments/authoring/` came to 5% fewer lines and 9% fewer lines of framework ceremony, with the biggest gap in ordering and dependencies between tests); documentation goes to TUnit, which scored 27 against 20 out of 30 on ten tasks.
 
 ## Repository layout and build commands
 
@@ -353,6 +353,7 @@ tests/Randactyl.NullObliviousAnalyzer.Tests.XUnit/   123 tests (xUnit v3)
 tests/Randactyl.NullObliviousAnalyzer.Tests.TUnit/   the same 123 tests (TUnit)
 samples/DirectoryServicesSample/                 uses the analyzer through a project reference
 docs/experiments/                                the xUnit v3 vs TUnit comparison and its raw results
+experiments/authoring/                           the same 12 test scenarios written once per framework (xUnit, TUnit); not in the solution
 eng/                                             scripts that produced that comparison
 Randactyl.NullObliviousAnalyzer.slnx             the solution
 Directory.Build.props, Directory.Packages.props  shared settings, central package versions

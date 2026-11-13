@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-  Compares the xUnit v3 and TUnit test projects: build time, run time, generated code, output size.
+  Compares the xUnit v3 and TUnit test projects: build time and run time.
 
 .DESCRIPTION
   Writes raw results to docs/experiments/xunit-vs-tunit-results.json (override with -OutFile).
@@ -11,7 +11,7 @@
   drift on the machine hits both the same way. Reported as median, min, max, plus every sample.
 
   The 'NoOp' configuration compiles FrameworkOverheadNoOp.cs (one empty test) into each project; the normal
-  configuration does not, so the suite stays at 105 tests.
+  configuration does not, so the suite keeps its normal test count.
 
 .PARAMETER Runs
   Timed runs per measurement (minimum 10 for the report to mean anything).
@@ -155,12 +155,6 @@ function Get-FileStats([string[]]$paths) {
     [ordered]@{ files = $files; lines = $lines; bytes = $bytes }
 }
 
-function Get-AssemblyStats([string]$dll) {
-    $json = dotnet run (Join-Path $root 'eng/AssemblyStats.cs') -- $dll
-    if ($LASTEXITCODE -ne 0) { throw "AssemblyStats failed for $dll" }
-    $json | ConvertFrom-Json
-}
-
 # ---------- machine and versions ----------
 
 Write-Host '== environment'
@@ -204,77 +198,7 @@ $results.buildIncremental = Measure-Interleaved -Label 'incremental build after 
     -Prepare { param($f) (Get-Item (Join-Path $f.Dir 'CallResultTests.cs')).LastWriteTime = Get-Date } `
     -Action { param($f) Invoke-Timed 'dotnet' @('build', $f.Csproj, '--no-restore', '--no-dependencies', '-v', 'q', '--nologo') }
 
-# ---------- 3. generated code (clean build with EmitCompilerGeneratedFiles) ----------
-
-Write-Host '== generated code'
-Stop-BuildServers
-$generated = [ordered]@{}
-foreach ($f in $fw.Values) {
-    Remove-BinObj $f
-    dotnet restore $f.Csproj -v q --nologo | Out-Null
-    dotnet build $f.Csproj --no-restore --no-dependencies -v q --nologo -p:EmitCompilerGeneratedFiles=true | Out-Null
-    if ($LASTEXITCODE -ne 0) { throw "generated-files build failed: $($f.Name)" }
-    $genRoot = Join-Path $f.Dir 'obj/Debug/net11.0/generated'
-    $all = @(if (Test-Path $genRoot) { Get-ChildItem $genRoot -Recurse -File -Filter *.cs })
-    $byGen = [ordered]@{}
-    foreach ($g in ($all | Group-Object { $_.FullName.Substring($genRoot.Length + 1).Split([IO.Path]::DirectorySeparatorChar)[0..1] -join '/' } | Sort-Object Name)) {
-        $byGen[$g.Name] = Get-FileStats @($g.Group | ForEach-Object FullName)
-    }
-    $msbuildGen = @(Get-ChildItem (Join-Path $f.Dir 'obj/Debug/net11.0') -File -Filter *.cs)  # AssemblyInfo, entry point etc., not Roslyn generators
-    $generated[$f.Name] = [ordered]@{
-        generatorOutputTotal = Get-FileStats @($all | ForEach-Object FullName)
-        byGenerator          = $byGen
-        msbuildGeneratedSources = [ordered]@{ detail = Get-FileStats @($msbuildGen | ForEach-Object FullName); names = @($msbuildGen | ForEach-Object Name) }
-    }
-}
-$results.generatedCode = $generated
-
-# ---------- 4. assembly, output folder, hand-written code ----------
-
-Write-Host '== sizes'
-$size = [ordered]@{}
-function Get-FrameworkFileNames($f, [string]$rootPackage) {
-    $assets = Get-Content (Join-Path $f.Dir 'obj/project.assets.json') -Raw | ConvertFrom-Json
-    $target = @($assets.targets.PSObject.Properties)[0].Value
-    $byId = @{}
-    foreach ($p in $target.PSObject.Properties) { $byId[$p.Name.Split('/')[0]] = $p.Value }
-    $seen = [Collections.Generic.HashSet[string]]::new(); $queue = [Collections.Generic.Queue[string]]::new()
-    $queue.Enqueue($rootPackage); $names = [Collections.Generic.HashSet[string]]::new()
-    while ($queue.Count) {
-        $id = $queue.Dequeue()
-        if (-not $byId.ContainsKey($id) -or -not $seen.Add($id)) { continue }
-        $e = $byId[$id]
-        foreach ($section in 'runtime', 'resource', 'runtimeTargets') {
-            if ($e.PSObject.Properties[$section]) { foreach ($k in $e.$section.PSObject.Properties.Name) { [void]$names.Add([IO.Path]::GetFileName($k)) } }
-        }
-        if ($e.PSObject.Properties['dependencies']) { foreach ($d in $e.dependencies.PSObject.Properties.Name) { $queue.Enqueue($d) } }
-    }
-    $names
-}
-dotnet build $testingProj -c Release -v q --nologo | Out-Null   # Release dependencies for the Release size build
-if ($LASTEXITCODE -ne 0) { throw 'Helper Release build failed' }
-foreach ($f in $fw.Values) {
-    foreach ($cfg in 'Debug', 'Release') {
-        Remove-BinObj $f
-        dotnet restore $f.Csproj -v q --nologo | Out-Null
-        dotnet build $f.Csproj --no-restore --no-dependencies -c $cfg -v q --nologo | Out-Null
-        if ($LASTEXITCODE -ne 0) { throw "build failed ($cfg): $($f.Name)" }
-        $frameworkFileNames = @{ $f.Name = Get-FrameworkFileNames $f $(if ($f.Name -eq 'xunit') { 'xunit.v3' } else { 'TUnit' }) }
-        $out = Join-Path $f.Dir "bin/$cfg/net11.0"
-        $dll = Join-Path $out "$($f.Proj).dll"
-        $items = @(Get-ChildItem $out -Recurse -File)
-        $dlls = @($items | Where-Object Extension -eq '.dll')
-        # "Framework-owned" = DLLs in the output whose file name ships in the framework package or in any package
-        # reachable from it (transitive closure in project.assets.json). Includes Microsoft.Testing.* and friends.
-        $owned = @($dlls | Where-Object { $_.Name -in $frameworkFileNames[$f.Name] })
-        $size["$($f.Name)-$cfg"] = [ordered]@{
-            testAssembly = Get-AssemblyStats $dll
-            outputFolder = [ordered]@{ files = $items.Count; bytes = ($items | Measure-Object Length -Sum).Sum; dlls = $dlls.Count }
-            frameworkOwnedAssemblies = [ordered]@{ count = $owned.Count; bytes = ($owned | Measure-Object Length -Sum).Sum; names = @($owned | ForEach-Object Name | Sort-Object) }
-        }
-    }
-}
-$results.sizes = $size
+# ---------- 3. hand-written size of the two main test projects ----------
 
 $hand = [ordered]@{}
 foreach ($f in $fw.Values) {
@@ -291,7 +215,7 @@ foreach ($x in $xs) {
 $hand.linesDifferingBetweenProjects = $differing
 $results.handWrittenCode = $hand
 
-# ---------- 5. rebuild normally, then run-time measurements ----------
+# ---------- 4. rebuild normally, then run-time measurements ----------
 
 foreach ($f in $fw.Values) {
     Remove-BinObj $f
@@ -328,7 +252,7 @@ foreach ($cap in 1, 4, $logical) {
     }
 }
 
-# ---------- 6. empty-test baseline (NoOp configuration) ----------
+# ---------- 5. empty-test baseline (NoOp configuration) ----------
 
 Write-Host '== building NoOp configuration'
 foreach ($f in $fw.Values) {
@@ -339,14 +263,14 @@ Stop-BuildServers
 $results.runNoOp_dotnetTest = Measure-Interleaved -Label 'one empty test, dotnet test --no-build' -Action { param($f) Invoke-DotnetTest $f $f.NoOp 'NoOp' }
 $results.runNoOp_exe        = Measure-Interleaved -Label 'one empty test, executable directly' -Action { param($f) Invoke-Exe $f $f.ExeNoOp 'NoOp' }
 
-# ---------- 7. leave the tree in its normal built state and write results ----------
+# ---------- 6. leave the tree in its normal built state and write results ----------
 
 Stop-BuildServers
 foreach ($f in $fw.Values) { dotnet build $f.Csproj -v q --nologo | Out-Null }
 
 $final = [ordered]@{
     machine  = $machine
-    versions = [ordered]@{ packages = $pkgs; runsPerMeasurement = $Runs; configuration = 'Debug (Release only for the sizes section)' }
+    versions = [ordered]@{ packages = $pkgs; runsPerMeasurement = $Runs; configuration = 'Debug' }
     results  = $results
 }
 New-Item -ItemType Directory -Force (Split-Path $OutFile) | Out-Null
