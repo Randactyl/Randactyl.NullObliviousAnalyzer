@@ -1,9 +1,27 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <TargetFramework>netstandard2.0</TargetFramework>
+    <!-- Set here as well as in Directory.Build.props so the folder still builds when copied into another repository. -->
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
     <RootNamespace>Randactyl.NullObliviousAnalyzer</RootNamespace>
     <IsRoslynComponent>true</IsRoslynComponent>
     <EnforceExtendedAnalyzerRules>true</EnforceExtendedAnalyzerRules>
+  </PropertyGroup>
+  <PropertyGroup Label="Package">
+    <PackageId>Randactyl.NullObliviousAnalyzer</PackageId>
+    <Version>0.1.0</Version>
+    <Authors>Randactyl</Authors>
+    <Description>Roslyn analyzers that list every place a null-oblivious reference value (from code compiled without nullable annotations) enters nullable-enabled code. They do no flow analysis on purpose: the reports are an audit list, not a second nullable analysis. Rules NOA001 to NOA008.</Description>
+    <PackageTags>analyzer;roslyn;nullable;nullability;null-oblivious</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <!-- An analyzer package ships only the analyzer: no lib/ folder, no dependencies for consumers. -->
+    <IncludeBuildOutput>false</IncludeBuildOutput>
+    <SuppressDependenciesWhenPacking>true</SuppressDependenciesWhenPacking>
+    <DevelopmentDependency>true</DevelopmentDependency>
+    <!-- NU5128: a package without lib/ref assets has no target framework dependency group; that is intended here. -->
+    <NoWarn>$(NoWarn);NU5128</NoWarn>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp" PrivateAssets="all" />
@@ -12,5 +30,9 @@
   <ItemGroup>
     <AdditionalFiles Include="AnalyzerReleases.Shipped.md" />
     <AdditionalFiles Include="AnalyzerReleases.Unshipped.md" />
+  </ItemGroup>
+  <ItemGroup Label="Package contents">
+    <None Include="$(TargetPath)" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />
+    <None Include="..\..\README.md" Pack="true" PackagePath="" Visible="false" Condition="Exists('..\..\README.md')" />
   </ItemGroup>
 </Project>
