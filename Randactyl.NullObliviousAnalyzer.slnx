@@ -5,6 +5,7 @@
   <Folder Name="/tests/">
     <Project Path="tests/Randactyl.NullObliviousAnalyzer.Testing/Randactyl.NullObliviousAnalyzer.Testing.csproj" />
     <Project Path="tests/Randactyl.NullObliviousAnalyzer.Tests.XUnit/Randactyl.NullObliviousAnalyzer.Tests.XUnit.csproj" />
+    <Project Path="tests/Randactyl.NullObliviousAnalyzer.Tests.TUnit/Randactyl.NullObliviousAnalyzer.Tests.TUnit.csproj" />
   </Folder>
   <Folder Name="/samples/">
     <Project Path="samples/DirectoryServicesSample/DirectoryServicesSample.csproj" />
