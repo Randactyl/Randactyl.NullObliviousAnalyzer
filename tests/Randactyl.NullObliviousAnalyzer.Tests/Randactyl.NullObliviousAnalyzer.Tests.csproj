@@ -5,9 +5,6 @@
     <IsPackable>false</IsPackable>
     <RootNamespace>Randactyl.NullObliviousAnalyzer.Tests</RootNamespace>
   </PropertyGroup>
-  <ItemGroup Condition="'$(Configuration)' != 'NoOp'">
-    <Compile Remove="FrameworkOverheadNoOp.cs" />
-  </ItemGroup>
   <ItemGroup>
     <PackageReference Include="TUnit" />
     <ProjectReference Include="..\Randactyl.NullObliviousAnalyzer.Testing\Randactyl.NullObliviousAnalyzer.Testing.csproj" />

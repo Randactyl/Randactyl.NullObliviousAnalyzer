@@ -1,7 +1,0 @@
-<Project>
-  <Import Project="$([MSBuild]::GetPathOfFileAbove('Directory.Packages.props', '$(MSBuildThisFileDirectory)../'))" />
-  <ItemGroup>
-    <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="11.0.0" />
-    <PackageVersion Include="xRetry.v3" Version="1.0.0" />
-  </ItemGroup>
-</Project>
