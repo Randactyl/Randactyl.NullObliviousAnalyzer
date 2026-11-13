@@ -38,7 +38,10 @@ internal sealed class ExclusionSettings
 
     private string Read(AnalyzerConfigOptions treeOptions, string key)
     {
-        if (treeOptions.TryGetValue(key, out var value) || _provider.GlobalOptions.TryGetValue(key, out value))
+        if (
+            treeOptions.TryGetValue(key, out var value)
+            || _provider.GlobalOptions.TryGetValue(key, out value)
+        )
             return value;
         return string.Empty;
     }
@@ -64,10 +67,19 @@ internal sealed class ExclusionSettings
             }
 
             foreach (var entry in Split(namespaces))
-                _namespaces.Add(entry.EndsWith(".*", StringComparison.Ordinal) ? entry.Substring(0, entry.Length - 2) : entry);
+                _namespaces.Add(
+                    entry.EndsWith(".*", StringComparison.Ordinal)
+                        ? entry.Substring(0, entry.Length - 2)
+                        : entry
+                );
         }
 
-        public bool IsEmpty => _assemblyNames.Count + _assemblyPrefixes.Count + _assemblyFamilies.Count + _namespaces.Count == 0;
+        public bool IsEmpty =>
+            _assemblyNames.Count
+                + _assemblyPrefixes.Count
+                + _assemblyFamilies.Count
+                + _namespaces.Count
+            == 0;
 
         public bool Matches(ISymbol member)
         {
@@ -84,7 +96,10 @@ internal sealed class ExclusionSettings
                         return true;
             }
 
-            if (_namespaces.Count > 0 && member.ContainingNamespace is { IsGlobalNamespace: false } ns)
+            if (
+                _namespaces.Count > 0
+                && member.ContainingNamespace is { IsGlobalNamespace: false } ns
+            )
             {
                 var text = ns.ToDisplayString();
                 foreach (var excluded in _namespaces)
@@ -97,8 +112,11 @@ internal sealed class ExclusionSettings
 
         private static bool IsSameOrChild(string name, string parent) =>
             string.Equals(name, parent, StringComparison.OrdinalIgnoreCase)
-            || (name.Length > parent.Length && name[parent.Length] == '.'
-                && name.StartsWith(parent, StringComparison.OrdinalIgnoreCase));
+            || (
+                name.Length > parent.Length
+                && name[parent.Length] == '.'
+                && name.StartsWith(parent, StringComparison.OrdinalIgnoreCase)
+            );
 
         private static IEnumerable<string> Split(string list)
         {
