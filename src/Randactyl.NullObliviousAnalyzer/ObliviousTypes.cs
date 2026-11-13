@@ -24,8 +24,10 @@ internal static class ObliviousTypes
     // substituted type argument that is itself a type parameter of the calling code can be oblivious.
     public static bool IsOblivious(ITypeSymbol? type, NullableAnnotation annotation) =>
         type is not null
-        && (type is { IsReferenceType: true, TypeKind: not (TypeKind.Dynamic or TypeKind.Error) }
-            || type is ITypeParameterSymbol { IsValueType: false })
+        && (
+            type is { IsReferenceType: true, TypeKind: not (TypeKind.Dynamic or TypeKind.Error) }
+            || type is ITypeParameterSymbol { IsValueType: false }
+        )
         && annotation == NullableAnnotation.None;
 
     public static Obliviousness Classify(ITypeSymbol? type, NullableAnnotation annotation)
@@ -50,7 +52,10 @@ internal static class ObliviousTypes
                 for (var i = 0; i < named.TypeArguments.Length; i++)
                 {
                     var argument = named.TypeArguments[i];
-                    if (IsOblivious(argument, named.TypeArgumentNullableAnnotations[i]) || ContainsOblivious(argument))
+                    if (
+                        IsOblivious(argument, named.TypeArgumentNullableAnnotations[i])
+                        || ContainsOblivious(argument)
+                    )
                         return true;
                 }
 
@@ -69,32 +74,73 @@ internal static class ObliviousTypes
     // member is rebuilt with those positions marked oblivious again. Everything else (foreach, await,
     // Classify) then works on the rebuilt type unchanged.
 
-    public static (ITypeSymbol? Type, NullableAnnotation Annotation) ReturnOf(Compilation compilation, IMethodSymbol method)
+    public static (ITypeSymbol? Type, NullableAnnotation Annotation) ReturnOf(
+        Compilation compilation,
+        IMethodSymbol method
+    )
     {
         var original = method.OriginalDefinition;
-        return Resolve(compilation, method.ReturnType, method.ReturnNullableAnnotation, original.ReturnType, original.ReturnNullableAnnotation);
+        return Resolve(
+            compilation,
+            method.ReturnType,
+            method.ReturnNullableAnnotation,
+            original.ReturnType,
+            original.ReturnNullableAnnotation
+        );
     }
 
-    public static (ITypeSymbol? Type, NullableAnnotation Annotation) TypeOf(Compilation compilation, IPropertySymbol property)
+    public static (ITypeSymbol? Type, NullableAnnotation Annotation) TypeOf(
+        Compilation compilation,
+        IPropertySymbol property
+    )
     {
         var original = property.OriginalDefinition;
-        return Resolve(compilation, property.Type, property.NullableAnnotation, original.Type, original.NullableAnnotation);
+        return Resolve(
+            compilation,
+            property.Type,
+            property.NullableAnnotation,
+            original.Type,
+            original.NullableAnnotation
+        );
     }
 
-    public static (ITypeSymbol? Type, NullableAnnotation Annotation) TypeOf(Compilation compilation, IFieldSymbol field)
+    public static (ITypeSymbol? Type, NullableAnnotation Annotation) TypeOf(
+        Compilation compilation,
+        IFieldSymbol field
+    )
     {
         var original = field.OriginalDefinition;
-        return Resolve(compilation, field.Type, field.NullableAnnotation, original.Type, original.NullableAnnotation);
+        return Resolve(
+            compilation,
+            field.Type,
+            field.NullableAnnotation,
+            original.Type,
+            original.NullableAnnotation
+        );
     }
 
-    public static (ITypeSymbol? Type, NullableAnnotation Annotation) TypeOf(Compilation compilation, IParameterSymbol parameter)
+    public static (ITypeSymbol? Type, NullableAnnotation Annotation) TypeOf(
+        Compilation compilation,
+        IParameterSymbol parameter
+    )
     {
         var original = parameter.OriginalDefinition;
-        return Resolve(compilation, parameter.Type, parameter.NullableAnnotation, original.Type, original.NullableAnnotation);
+        return Resolve(
+            compilation,
+            parameter.Type,
+            parameter.NullableAnnotation,
+            original.Type,
+            original.NullableAnnotation
+        );
     }
 
-    public static (ITypeSymbol? Type, NullableAnnotation Annotation) Resolve(Compilation compilation,
-        ITypeSymbol? type, NullableAnnotation annotation, ITypeSymbol? originalType, NullableAnnotation originalAnnotation)
+    public static (ITypeSymbol? Type, NullableAnnotation Annotation) Resolve(
+        Compilation compilation,
+        ITypeSymbol? type,
+        NullableAnnotation annotation,
+        ITypeSymbol? originalType,
+        NullableAnnotation originalAnnotation
+    )
     {
         if (type is null || originalType is null)
             return (type, annotation);
@@ -107,40 +153,73 @@ internal static class ObliviousTypes
     /// The original type is a type parameter of an unannotated declaration, and what replaced it is neither a
     /// value type nor explicitly nullable.
     /// </summary>
-    private static bool IsSubstitutedOblivious(ITypeSymbol type, NullableAnnotation annotation,
-        ITypeSymbol original, NullableAnnotation originalAnnotation) =>
+    private static bool IsSubstitutedOblivious(
+        ITypeSymbol type,
+        NullableAnnotation annotation,
+        ITypeSymbol original,
+        NullableAnnotation originalAnnotation
+    ) =>
         original is ITypeParameterSymbol
         && originalAnnotation == NullableAnnotation.None
         && annotation != NullableAnnotation.Annotated
         && !type.IsValueType
-        && (type is { IsReferenceType: true, TypeKind: not (TypeKind.Dynamic or TypeKind.Error) } || type is ITypeParameterSymbol);
+        && (
+            type is { IsReferenceType: true, TypeKind: not (TypeKind.Dynamic or TypeKind.Error) }
+            || type is ITypeParameterSymbol
+        );
 
-    private static ITypeSymbol Rebuild(Compilation compilation, ITypeSymbol type, ITypeSymbol original)
+    private static ITypeSymbol Rebuild(
+        Compilation compilation,
+        ITypeSymbol type,
+        ITypeSymbol original
+    )
     {
         switch (type)
         {
-            case IArrayTypeSymbol array when original is IArrayTypeSymbol originalArray && array.Rank == originalArray.Rank:
-                var elementAnnotation = IsSubstitutedOblivious(array.ElementType, array.ElementNullableAnnotation,
-                    originalArray.ElementType, originalArray.ElementNullableAnnotation)
+            case IArrayTypeSymbol array
+                when original is IArrayTypeSymbol originalArray && array.Rank == originalArray.Rank:
+                var elementAnnotation = IsSubstitutedOblivious(
+                    array.ElementType,
+                    array.ElementNullableAnnotation,
+                    originalArray.ElementType,
+                    originalArray.ElementNullableAnnotation
+                )
                     ? NullableAnnotation.None
                     : array.ElementNullableAnnotation;
                 var element = Rebuild(compilation, array.ElementType, originalArray.ElementType);
-                return ReferenceEquals(element, array.ElementType) && elementAnnotation == array.ElementNullableAnnotation
+                return
+                    ReferenceEquals(element, array.ElementType)
+                    && elementAnnotation == array.ElementNullableAnnotation
                     ? array
                     : compilation.CreateArrayTypeSymbol(element, array.Rank, elementAnnotation);
 
-            case INamedTypeSymbol named when original is INamedTypeSymbol originalNamed
-                && named.TypeArguments.Length > 0 && named.TypeArguments.Length == originalNamed.TypeArguments.Length:
+            case INamedTypeSymbol named
+                when original is INamedTypeSymbol originalNamed
+                    && named.TypeArguments.Length > 0
+                    && named.TypeArguments.Length == originalNamed.TypeArguments.Length:
                 var changed = false;
-                var arguments = ImmutableArray.CreateBuilder<ITypeSymbol>(named.TypeArguments.Length);
-                var annotations = ImmutableArray.CreateBuilder<NullableAnnotation>(named.TypeArguments.Length);
+                var arguments = ImmutableArray.CreateBuilder<ITypeSymbol>(
+                    named.TypeArguments.Length
+                );
+                var annotations = ImmutableArray.CreateBuilder<NullableAnnotation>(
+                    named.TypeArguments.Length
+                );
                 for (var i = 0; i < named.TypeArguments.Length; i++)
                 {
                     var argument = named.TypeArguments[i];
                     var argumentAnnotation = named.TypeArgumentNullableAnnotations[i];
                     var originalArgument = originalNamed.TypeArguments[i];
-                    var originalArgumentAnnotation = originalNamed.TypeArgumentNullableAnnotations[i];
-                    if (IsSubstitutedOblivious(argument, argumentAnnotation, originalArgument, originalArgumentAnnotation))
+                    var originalArgumentAnnotation = originalNamed.TypeArgumentNullableAnnotations[
+                        i
+                    ];
+                    if (
+                        IsSubstitutedOblivious(
+                            argument,
+                            argumentAnnotation,
+                            originalArgument,
+                            originalArgumentAnnotation
+                        )
+                    )
                     {
                         changed |= argumentAnnotation != NullableAnnotation.None;
                         argumentAnnotation = NullableAnnotation.None;
@@ -155,15 +234,23 @@ internal static class ObliviousTypes
                 if (!changed)
                     return named;
                 if (!named.IsTupleType)
-                    return named.ConstructedFrom.Construct(arguments.ToImmutable(), annotations.ToImmutable());
+                    return named.ConstructedFrom.Construct(
+                        arguments.ToImmutable(),
+                        annotations.ToImmutable()
+                    );
                 if (named.TupleElements.Length != arguments.Count)
                     return named;
 
                 var names = ImmutableArray.CreateBuilder<string?>(arguments.Count);
                 foreach (var tupleElement in named.TupleElements)
-                    names.Add(tupleElement.IsExplicitlyNamedTupleElement ? tupleElement.Name : null);
-                return compilation.CreateTupleTypeSymbol(arguments.ToImmutable(), names.ToImmutable(),
-                    elementNullableAnnotations: annotations.ToImmutable());
+                    names.Add(
+                        tupleElement.IsExplicitlyNamedTupleElement ? tupleElement.Name : null
+                    );
+                return compilation.CreateTupleTypeSymbol(
+                    arguments.ToImmutable(),
+                    names.ToImmutable(),
+                    elementNullableAnnotations: annotations.ToImmutable()
+                );
 
             default:
                 return type;

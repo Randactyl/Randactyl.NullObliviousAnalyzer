@@ -39,12 +39,19 @@ public static class AnalyzerVerifier
     public static Task VerifyAsync(string source, string obliviousLibrarySource) =>
         VerifyAsync(source, o => o.ObliviousLibrarySource = obliviousLibrarySource);
 
-    public static Task VerifyAsync(string source, string obliviousLibrarySource, Action<AnalyzerTestOptions> configure) =>
-        VerifyAsync(source, o =>
-        {
-            o.ObliviousLibrarySource = obliviousLibrarySource;
-            configure(o);
-        });
+    public static Task VerifyAsync(
+        string source,
+        string obliviousLibrarySource,
+        Action<AnalyzerTestOptions> configure
+    ) =>
+        VerifyAsync(
+            source,
+            o =>
+            {
+                o.ObliviousLibrarySource = obliviousLibrarySource;
+                configure(o);
+            }
+        );
 
     public static Task VerifyAsync(string source, Action<AnalyzerTestOptions> configure)
     {
@@ -53,7 +60,10 @@ public static class AnalyzerVerifier
         return CreateTest(source, options).RunAsync();
     }
 
-    private static CSharpAnalyzerTest<NullObliviousAnalyzer, DefaultVerifier> CreateTest(string source, AnalyzerTestOptions options)
+    private static CSharpAnalyzerTest<NullObliviousAnalyzer, DefaultVerifier> CreateTest(
+        string source,
+        AnalyzerTestOptions options
+    )
     {
         var references = ReferenceAssemblies.Net.Net100;
         if (options.Packages.Count > 0)
@@ -77,7 +87,9 @@ public static class AnalyzerVerifier
         }
 
         if (options.GlobalConfig is { } globalConfig)
-            test.TestState.AnalyzerConfigFiles.Add(("/.globalconfig", "is_global = true\n" + globalConfig));
+            test.TestState.AnalyzerConfigFiles.Add(
+                ("/.globalconfig", "is_global = true\n" + globalConfig)
+            );
 
         if (options.ObliviousLibrarySource is { } librarySource)
         {
@@ -88,13 +100,20 @@ public static class AnalyzerVerifier
 
         // Nullable is off by default in the harness; the project under test enables it, the library never does.
         var libraryName = options.ObliviousLibraryName;
-        test.SolutionTransforms.Add((solution, projectId) =>
-        {
-            var project = solution.GetProject(projectId)!;
-            var nullable = project.Name == libraryName ? NullableContextOptions.Disable : NullableContextOptions.Enable;
-            var compilationOptions = ((CSharpCompilationOptions)project.CompilationOptions!).WithNullableContextOptions(nullable);
-            return solution.WithProjectCompilationOptions(projectId, compilationOptions);
-        });
+        test.SolutionTransforms.Add(
+            (solution, projectId) =>
+            {
+                var project = solution.GetProject(projectId)!;
+                var nullable =
+                    project.Name == libraryName
+                        ? NullableContextOptions.Disable
+                        : NullableContextOptions.Enable;
+                var compilationOptions = (
+                    (CSharpCompilationOptions)project.CompilationOptions!
+                ).WithNullableContextOptions(nullable);
+                return solution.WithProjectCompilationOptions(projectId, compilationOptions);
+            }
+        );
 
         return test;
     }
