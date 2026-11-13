@@ -38,7 +38,7 @@ public class CollectionElementTests
     }
 
     [Fact]
-    public Task Annotated_and_value_type_arrays_are_not_reported()
+    public Task Annotated_and_value_type_arrays_report_only_the_oblivious_Ints_field()
     {
         const string source = """
             class C
@@ -73,7 +73,7 @@ public class CollectionElementTests
     }
 
     [Fact]
-    public Task Foreach_over_annotated_collections_is_not_reported()
+    public Task Foreach_over_annotated_collections_reports_only_the_oblivious_Ints_field()
     {
         const string source = """
             using System.Collections.Generic;

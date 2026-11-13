@@ -115,7 +115,7 @@ public class CallResultTests
     }
 
     [Fact]
-    public Task Await_of_annotated_task_is_not_reported()
+    public Task Await_of_annotated_task_reports_only_the_oblivious_GetIntAsync_call()
     {
         const string source = """
             using System.Threading.Tasks;

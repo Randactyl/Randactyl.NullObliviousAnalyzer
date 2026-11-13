@@ -111,4 +111,233 @@ public class ConfigurationTests
             """;
         return AnalyzerVerifier.VerifyAsync(source, Libs.Oblivious, o => o.EditorConfig = "null_oblivious_analyzer.excluded_assemblies = ObliviousLib");
     }
+
+    private const string VendorSource = """
+        namespace Vendor
+        {
+            public class Source
+            {
+                public string[] Names;
+                public System.Collections.Generic.List<string> Items;
+                public System.Threading.Tasks.Task<string> GetAsync() => null;
+            }
+        }
+        """;
+
+    private const string ArrayCallback = """
+
+        public delegate void ArrayCallback(Foo[] a);
+        public class Registry
+        {
+            public void On(ArrayCallback c) { }
+            public System.Threading.Tasks.Task<Foo[]> LoadAsync() => null;
+        }
+        """;
+
+    private const string ExcludeLib = "null_oblivious_analyzer.excluded_assemblies = ObliviousLib";
+    private const string ExcludeVendor = "null_oblivious_analyzer.excluded_namespaces = Vendor";
+
+    [Fact]
+    public Task Excluded_assembly_follows_a_local_into_foreach()
+    {
+        const string source = """
+            class C { void M(Lib lib) { var arr = lib.Array; foreach (var e in arr) { } } }
+            """;
+        return AnalyzerVerifier.VerifyAsync(source, Libs.Oblivious, o => o.EditorConfig = ExcludeLib);
+    }
+
+    [Fact]
+    public Task Excluded_assembly_follows_a_local_into_array_element()
+    {
+        const string source = """
+            class C { void M(Lib lib) { var arr = lib.Array; var x = arr[0]; } }
+            """;
+        return AnalyzerVerifier.VerifyAsync(source, Libs.Oblivious, o => o.EditorConfig = ExcludeLib);
+    }
+
+    [Fact]
+    public Task Excluded_assembly_follows_a_local_into_spread()
+    {
+        const string source = """
+            using System.Collections.Generic;
+            class C { void M(Lib lib) { var items = lib.Items; List<Foo> copy = [.. items]; } }
+            """;
+        return AnalyzerVerifier.VerifyAsync(source, Libs.Oblivious, o => o.EditorConfig = ExcludeLib);
+    }
+
+    [Fact]
+    public Task Excluded_assembly_follows_a_local_into_await()
+    {
+        const string source = """
+            class C { async System.Threading.Tasks.Task M(Lib lib) { var t = lib.GetFooAsync(); var f = await t; } }
+            """;
+        return AnalyzerVerifier.VerifyAsync(source, Libs.Oblivious, o => o.EditorConfig = ExcludeLib);
+    }
+
+    [Fact]
+    public Task Excluded_assembly_follows_locals_through_parentheses_conversions_and_other_locals()
+    {
+        const string source = """
+            class C
+            {
+                void M(Lib lib)
+                {
+                    var first = lib.Array;
+                    var second = (first);
+                    var third = second;
+                    foreach (var e in third) { }
+                }
+            }
+            """;
+        return AnalyzerVerifier.VerifyAsync(source, Libs.Oblivious, o => o.EditorConfig = ExcludeLib);
+    }
+
+    [Fact]
+    public Task Excluded_assembly_follows_a_local_initialized_with_an_await()
+    {
+        const string source = """
+            class C { async System.Threading.Tasks.Task M(Registry registry) { var arr = await registry.LoadAsync(); var x = arr[0]; } }
+            """;
+        return AnalyzerVerifier.VerifyAsync(source, Libs.Oblivious + ArrayCallback, o => o.EditorConfig = ExcludeLib);
+    }
+
+    [Fact]
+    public Task Excluded_namespace_follows_a_local_into_foreach()
+    {
+        const string source = """
+            class C { void M(Vendor.Source s) { var arr = s.Names; foreach (var e in arr) { } } }
+            """;
+        return AnalyzerVerifier.VerifyAsync(source, VendorSource, o => o.EditorConfig = ExcludeVendor);
+    }
+
+    [Fact]
+    public Task Excluded_namespace_follows_a_local_into_array_element()
+    {
+        const string source = """
+            class C { void M(Vendor.Source s) { var arr = s.Names; var x = arr[0]; } }
+            """;
+        return AnalyzerVerifier.VerifyAsync(source, VendorSource, o => o.EditorConfig = ExcludeVendor);
+    }
+
+    [Fact]
+    public Task Excluded_namespace_follows_a_local_into_spread()
+    {
+        const string source = """
+            using System.Collections.Generic;
+            class C { void M(Vendor.Source s) { var items = s.Items; List<string> copy = [.. items]; } }
+            """;
+        return AnalyzerVerifier.VerifyAsync(source, VendorSource, o => o.EditorConfig = ExcludeVendor);
+    }
+
+    [Fact]
+    public Task Excluded_namespace_follows_a_local_into_await()
+    {
+        const string source = """
+            class C { async System.Threading.Tasks.Task M(Vendor.Source s) { var t = s.GetAsync(); var v = await t; } }
+            """;
+        return AnalyzerVerifier.VerifyAsync(source, VendorSource, o => o.EditorConfig = ExcludeVendor);
+    }
+
+    [Fact]
+    public Task Local_that_is_reassigned_is_still_reported()
+    {
+        const string source = """
+            class C
+            {
+                void M(Lib lib)
+                {
+                    var arr = lib.Array;
+                    arr = lib.Array;
+                    foreach (var {|NOA005:e|} in arr) { }
+                    var x = {|NOA005:arr[0]|};
+                }
+            }
+            """;
+        return AnalyzerVerifier.VerifyAsync(source, Libs.Oblivious, o => o.EditorConfig = ExcludeLib);
+    }
+
+    [Fact]
+    public Task Parameter_origin_cannot_be_determined_and_is_still_reported()
+    {
+        const string source = """
+            class C { void M(Registry registry) { registry.On(arr => { foreach (var {|NOA005:e|} in arr) { } }); } }
+            """;
+        return AnalyzerVerifier.VerifyAsync(source, Libs.Oblivious + ArrayCallback, o => o.EditorConfig = ExcludeLib);
+    }
+
+    [Fact]
+    public Task Assembly_wildcard_with_dot_matches_the_bare_prefix_and_children_but_not_a_longer_name()
+    {
+        const string source = """
+            class C { void M(Lib lib) { var a = lib.GetFoo(); } }
+            """;
+        const string reported = """
+            class C { void M(Lib lib) { var a = {|NOA001:lib.GetFoo()|}; } }
+            """;
+        const string config = "null_oblivious_analyzer.excluded_assemblies = System.*";
+        return Task.WhenAll(
+            AnalyzerVerifier.VerifyAsync(source, Libs.Oblivious, o => { o.ObliviousLibraryName = "System"; o.EditorConfig = config; }),
+            AnalyzerVerifier.VerifyAsync(source, Libs.Oblivious, o => { o.ObliviousLibraryName = "System.Xml"; o.EditorConfig = config; }),
+            AnalyzerVerifier.VerifyAsync(reported, Libs.Oblivious, o => { o.ObliviousLibraryName = "SystemFoo"; o.EditorConfig = config; }));
+    }
+
+    [Fact]
+    public Task Assembly_wildcard_without_dot_is_a_plain_prefix()
+    {
+        const string source = """
+            class C { void M(Lib lib) { var a = lib.GetFoo(); } }
+            """;
+        const string config = "null_oblivious_analyzer.excluded_assemblies = Sys*";
+        return Task.WhenAll(
+            AnalyzerVerifier.VerifyAsync(source, Libs.Oblivious, o => { o.ObliviousLibraryName = "SystemFoo"; o.EditorConfig = config; }),
+            AnalyzerVerifier.VerifyAsync(source, Libs.Oblivious, o => { o.ObliviousLibraryName = "System"; o.EditorConfig = config; }));
+    }
+
+    [Fact]
+    public Task Assembly_names_match_without_regard_to_case()
+    {
+        const string source = """
+            class C { void M(Lib lib) { var a = lib.GetFoo(); } }
+            """;
+        return Task.WhenAll(
+            AnalyzerVerifier.VerifyAsync(source, Libs.Oblivious, o => o.EditorConfig = "null_oblivious_analyzer.excluded_assemblies = obliviouslib"),
+            AnalyzerVerifier.VerifyAsync(source, Libs.Oblivious, o => o.EditorConfig = "null_oblivious_analyzer.excluded_assemblies = OBLIVIOUS*"));
+    }
+
+    [Fact]
+    public Task Namespace_names_match_without_regard_to_case()
+    {
+        const string source = """
+            class C
+            {
+                void M(Vendor.Inner.Thing a, Vendor.Top b, Other.Else c)
+                {
+                    var x = a.Get();
+                    var y = b.Get();
+                    var z = {|NOA001:c.Get()|};
+                }
+            }
+            """;
+        return Task.WhenAll(
+            AnalyzerVerifier.VerifyAsync(source, Vendor, o => o.EditorConfig = "null_oblivious_analyzer.excluded_namespaces = vendor"),
+            AnalyzerVerifier.VerifyAsync(source, Vendor, o => o.EditorConfig = "null_oblivious_analyzer.excluded_namespaces = VENDOR.*"));
+    }
+
+    [Fact]
+    public Task Namespace_wildcard_without_dot_is_not_a_prefix_match()
+    {
+        const string source = """
+            class C { void M(Vendor.Top b) { var y = {|NOA001:b.Get()|}; } }
+            """;
+        return AnalyzerVerifier.VerifyAsync(source, Vendor, o => o.EditorConfig = "null_oblivious_analyzer.excluded_namespaces = Ven*");
+    }
+
+    [Fact]
+    public Task Namespace_wildcard_with_dot_covers_the_namespace_itself()
+    {
+        const string source = """
+            class C { void M(Vendor.Top b, Vendor.Inner.Thing t, Other.Else c) { var x = b.Get(); var y = t.Get(); var z = {|NOA001:c.Get()|}; } }
+            """;
+        return AnalyzerVerifier.VerifyAsync(source, Vendor, o => o.EditorConfig = "null_oblivious_analyzer.excluded_namespaces = Vendor.*");
+    }
 }
