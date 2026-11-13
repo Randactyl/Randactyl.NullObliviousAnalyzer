@@ -1,0 +1,15 @@
+<Project>
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- 4.14 is the oldest Roslyn that has every API we use plus current IDE hosts can load it; the SDK 11.0.100 compiler (5.x) is newer, so the analyzer loads. -->
+    <PackageVersion Include="Microsoft.CodeAnalysis.CSharp" Version="4.14.0" />
+    <PackageVersion Include="Microsoft.CodeAnalysis.CSharp.Workspaces" Version="4.14.0" />
+    <PackageVersion Include="System.Security.Cryptography.Pkcs" Version="11.0.0" />
+    <PackageVersion Include="Microsoft.CodeAnalysis.Analyzers" Version="3.11.0" />
+    <PackageVersion Include="Microsoft.CodeAnalysis.CSharp.Analyzer.Testing" Version="1.1.4" />
+    <PackageVersion Include="xunit.v3" Version="4.0.3" />
+    <PackageVersion Include="System.DirectoryServices.AccountManagement" Version="11.0.0" />
+  </ItemGroup>
+</Project>

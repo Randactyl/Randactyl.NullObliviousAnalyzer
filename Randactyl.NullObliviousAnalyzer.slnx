@@ -1,0 +1,12 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Randactyl.NullObliviousAnalyzer/Randactyl.NullObliviousAnalyzer.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Randactyl.NullObliviousAnalyzer.Testing/Randactyl.NullObliviousAnalyzer.Testing.csproj" />
+    <Project Path="tests/Randactyl.NullObliviousAnalyzer.Tests.XUnit/Randactyl.NullObliviousAnalyzer.Tests.XUnit.csproj" />
+  </Folder>
+  <Folder Name="/samples/">
+    <Project Path="samples/DirectoryServicesSample/DirectoryServicesSample.csproj" />
+  </Folder>
+</Solution>

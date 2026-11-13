@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net11.0</TargetFramework>
+    <RootNamespace>Randactyl.NullObliviousAnalyzer.Testing</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Analyzer.Testing" />
+    <!-- Pin newer than the testing package's own transitive pins (old Workspaces 1.0.1, vulnerable Pkcs 9.0.6). -->
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Workspaces" />
+    <PackageReference Include="System.Security.Cryptography.Pkcs" />
+    <ProjectReference Include="..\..\src\Randactyl.NullObliviousAnalyzer\Randactyl.NullObliviousAnalyzer.csproj" />
+  </ItemGroup>
+</Project>
