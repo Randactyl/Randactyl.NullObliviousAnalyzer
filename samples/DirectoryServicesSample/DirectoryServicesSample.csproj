@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <!-- AccountManagement is Windows-only; the -windows TFM avoids CA1416 noise. -->
+    <TargetFramework>net11.0-windows</TargetFramework>
+    <RootNamespace>DirectoryServicesSample</RootNamespace>
+    <!-- The sample exists to show the NOA warnings, so they must not fail the build. -->
+    <WarningsNotAsErrors>$(WarningsNotAsErrors);NOA001;NOA002;NOA003;NOA004;NOA005;NOA006;NOA007</WarningsNotAsErrors>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="System.DirectoryServices.AccountManagement" />
+    <ProjectReference Include="..\..\src\Randactyl.NullObliviousAnalyzer\Randactyl.NullObliviousAnalyzer.csproj"
+                      OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+  </ItemGroup>
+</Project>
