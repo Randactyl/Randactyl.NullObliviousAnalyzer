@@ -139,31 +139,41 @@ public class Legacy
 | NOA007 | An override or interface implementation whose parameter or setter value is oblivious in the base member | Warning |
 | NOA008 | A value whose type is not oblivious itself but contains an oblivious type argument, array element or tuple element | Info |
 
-**NOA001, call result.** Message: `'Legacy.GetFoo()' returns the null-oblivious type 'Foo'`.
+### NOA001: call result
+
+Message: `'Legacy.GetFoo()' returns the null-oblivious type 'Foo'`.
 
 ```csharp
 Foo a = lib.GetFoo();
 ```
 
-**NOA002, property or indexer read.** Message: `Reading 'Legacy.Prop' yields the null-oblivious type 'Foo'`. A plain assignment (`lib.Prop = f;`) is a write and is not reported. A compound assignment such as `lib.Prop ??= f;` reads first and is reported.
+### NOA002: property or indexer read
+
+Message: `Reading 'Legacy.Prop' yields the null-oblivious type 'Foo'`. A plain assignment (`lib.Prop = f;`) is a write and is not reported. A compound assignment such as `lib.Prop ??= f;` reads first and is reported.
 
 ```csharp
 var b = lib.Prop;
 ```
 
-**NOA003, field read.** Message: `Reading field 'Legacy.Field' yields the null-oblivious type 'Foo'`. Constants with a non-null value are skipped.
+### NOA003: field read
+
+Message: `Reading field 'Legacy.Field' yields the null-oblivious type 'Foo'`. Constants with a non-null value are skipped.
 
 ```csharp
 var c = lib.Field;
 ```
 
-**NOA004, out, ref and deconstruction.** Message: `The callee may assign a null-oblivious value of type 'Foo' through parameter 'f'`. The report sits on the argument. It also covers `var (a, b) = x;` when `Deconstruct` has oblivious `out` parameters; each target that is not a discard and not explicitly nullable gets a report.
+### NOA004: out, ref and deconstruction
+
+Message: `The callee may assign a null-oblivious value of type 'Foo' through parameter 'f'`. The report sits on the argument. It also covers `var (a, b) = x;` when `Deconstruct` has oblivious `out` parameters; each target that is not a discard and not explicitly nullable gets a report.
 
 ```csharp
 lib.Fill(out var d);
 ```
 
-**NOA005, collection element.** Message: `'e' receives an element of the null-oblivious type 'Foo'`. The name is the iteration variable or the expression text.
+### NOA005: collection element
+
+Message: `'e' receives an element of the null-oblivious type 'Foo'`. The name is the iteration variable or the expression text.
 
 ```csharp
 foreach (var e in lib.Array) { }   // NOA005 on e; NOA003 on lib.Array
@@ -171,13 +181,17 @@ List<Foo> copy = [.. lib.Items];   // NOA005 on the spread
 var q = from p in lib.Items select p;   // NOA005 on p
 ```
 
-**NOA006, delegate parameter.** Message: `Parameter 'f' is bound to a delegate parameter of the null-oblivious type 'Foo'`. A lambda parameter you declare as nullable (`(object? s, EventArgs? e) => ...`) is not reported.
+### NOA006: delegate parameter
+
+Message: `Parameter 'f' is bound to a delegate parameter of the null-oblivious type 'Foo'`. A lambda parameter you declare as nullable (`(object? s, EventArgs? e) => ...`) is not reported.
 
 ```csharp
 lib.Each(f => { });
 ```
 
-**NOA007, override or implementation.** Message: `'f' overrides or implements 'Legacy.Take(Foo)', whose incoming parameter or setter value has the null-oblivious type 'Foo'`. Callers of the base member may pass null into your override. Declaring the parameter nullable (`Foo? f`) clears the report. Properties are reported on their type only when they have a setter or `init`.
+### NOA007: override or implementation
+
+Message: `'f' overrides or implements 'Legacy.Take(Foo)', whose incoming parameter or setter value has the null-oblivious type 'Foo'`. Callers of the base member may pass null into your override. Declaring the parameter nullable (`Foo? f`) clears the report. Properties are reported on their type only when they have a setter or `init`.
 
 ```csharp
 class Derived : Legacy
@@ -186,7 +200,9 @@ class Derived : Legacy
 }
 ```
 
-**NOA008, nested oblivious type.** Message: `'Legacy.GetPair()' has type '(Foo, int)' which contains a null-oblivious reference type`.
+### NOA008: nested oblivious type
+
+Message: `'Legacy.GetPair()' has type '(Foo, int)' which contains a null-oblivious reference type`.
 
 ```csharp
 var pair = lib.GetPair();
@@ -333,7 +349,7 @@ Run the tests from the repository root:
 dotnet test
 ```
 
-Expect 123 passing tests. `dotnet test` in the root finds the solution file and runs the one test project. `global.json` makes it use the Microsoft.Testing.Platform runner, which TUnit is built on.
+Expect 124 passing tests. `dotnet test` in the root finds the solution file and runs the one test project. `global.json` makes it use the Microsoft.Testing.Platform runner, which TUnit is built on.
 
 Two things to know when the tests run:
 
@@ -345,7 +361,7 @@ Two things to know when the tests run:
 ```
 src/Randactyl.NullObliviousAnalyzer/             the analyzer (netstandard2.0), rules NOA001-NOA008
 tests/Randactyl.NullObliviousAnalyzer.Testing/   AnalyzerVerifier, the shared test helper
-tests/Randactyl.NullObliviousAnalyzer.Tests/     123 tests (TUnit)
+tests/Randactyl.NullObliviousAnalyzer.Tests/     124 tests (TUnit)
 samples/DirectoryServicesSample/                 uses the analyzer through a project reference
 Randactyl.NullObliviousAnalyzer.slnx             the solution
 Directory.Build.props, Directory.Packages.props  shared settings, central package versions
@@ -355,7 +371,7 @@ global.json                                      selects the Microsoft.Testing.P
 ```
 dotnet build Randactyl.NullObliviousAnalyzer.slnx                         # whole solution
 dotnet build samples/DirectoryServicesSample --no-incremental             # see the NOA warnings
-dotnet test                                                              # 123 tests
+dotnet test                                                              # 124 tests
 dotnet pack src/Randactyl.NullObliviousAnalyzer -c Release -o artifacts/pkg   # the NuGet package
 ```
 

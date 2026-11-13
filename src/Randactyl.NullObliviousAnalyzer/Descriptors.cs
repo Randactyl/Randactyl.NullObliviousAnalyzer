@@ -6,50 +6,61 @@ internal static class Descriptors
 {
     private const string Category = "Nullability";
 
+    // Each rule has a heading in README.md; the help link points at its GitHub anchor.
+    private const string HelpLinkBase = "https://github.com/Randactyl/Randactyl.NullObliviousAnalyzer#";
+
     public static readonly DiagnosticDescriptor CallResult = Create(
         "NOA001",
+        "noa001-call-result",
         "Call returns a null-oblivious reference type",
         "'{0}' returns the null-oblivious type '{1}'"
     );
 
     public static readonly DiagnosticDescriptor PropertyRead = Create(
         "NOA002",
+        "noa002-property-or-indexer-read",
         "Property or indexer read yields a null-oblivious reference type",
         "Reading '{0}' yields the null-oblivious type '{1}'"
     );
 
     public static readonly DiagnosticDescriptor FieldRead = Create(
         "NOA003",
+        "noa003-field-read",
         "Field read yields a null-oblivious reference type",
         "Reading field '{0}' yields the null-oblivious type '{1}'"
     );
 
     public static readonly DiagnosticDescriptor RefOrOutArgument = Create(
         "NOA004",
+        "noa004-out-ref-and-deconstruction",
         "out/ref argument may receive a null-oblivious reference type",
         "The callee may assign a null-oblivious value of type '{1}' through parameter '{0}'"
     );
 
     public static readonly DiagnosticDescriptor CollectionElement = Create(
         "NOA005",
+        "noa005-collection-element",
         "Element read, iterated or spread from a null-oblivious collection",
         "'{0}' receives an element of the null-oblivious type '{1}'"
     );
 
     public static readonly DiagnosticDescriptor DelegateParameter = Create(
         "NOA006",
+        "noa006-delegate-parameter",
         "Delegate parameter bound to a lambda or method group is null-oblivious",
         "Parameter '{0}' is bound to a delegate parameter of the null-oblivious type '{1}'"
     );
 
     public static readonly DiagnosticDescriptor OverrideParameter = Create(
         "NOA007",
+        "noa007-override-or-implementation",
         "Parameter or property value overrides or implements a null-oblivious one",
         "'{0}' overrides or implements '{2}', whose incoming parameter or setter value has the null-oblivious type '{1}'"
     );
 
     public static readonly DiagnosticDescriptor NestedOblivious = Create(
         "NOA008",
+        "noa008-nested-oblivious-type",
         "Null-oblivious reference type nested in a type argument, array element or tuple element",
         "'{0}' has type '{1}' which contains a null-oblivious reference type",
         DiagnosticSeverity.Info
@@ -57,8 +68,18 @@ internal static class Descriptors
 
     private static DiagnosticDescriptor Create(
         string id,
+        string helpAnchor,
         string title,
         string message,
         DiagnosticSeverity severity = DiagnosticSeverity.Warning
-    ) => new(id, title, message, Category, severity, isEnabledByDefault: true);
+    ) =>
+        new(
+            id,
+            title,
+            message,
+            Category,
+            severity,
+            isEnabledByDefault: true,
+            helpLinkUri: HelpLinkBase + helpAnchor
+        );
 }
