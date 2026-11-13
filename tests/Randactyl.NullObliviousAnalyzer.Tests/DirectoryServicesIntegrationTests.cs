@@ -1,7 +1,5 @@
-using System;
 using System.Threading.Tasks;
 using Randactyl.NullObliviousAnalyzer.Testing;
-using TUnit.Core;
 
 namespace Randactyl.NullObliviousAnalyzer.Tests;
 
@@ -13,7 +11,9 @@ namespace Randactyl.NullObliviousAnalyzer.Tests;
 public class DirectoryServicesIntegrationTests
 {
     private static void UsePackage(AnalyzerTestOptions options) =>
-        options.Packages = [new NuGetPackage("System.DirectoryServices.AccountManagement", "11.0.0")];
+        options.Packages = [
+            new NuGetPackage("System.DirectoryServices.AccountManagement", "11.0.0"),
+        ];
 
     [Test]
     public Task FindByIdentity_and_Members_are_reported()
@@ -91,10 +91,14 @@ public class DirectoryServicesIntegrationTests
             using System.DirectoryServices.AccountManagement;
             class C { void M(PrincipalContext context) { var g = GroupPrincipal.FindByIdentity(context, "x"); } }
             """;
-        return AnalyzerVerifier.VerifyAsync(source, o =>
-        {
-            UsePackage(o);
-            o.EditorConfig = "null_oblivious_analyzer.excluded_assemblies = System.DirectoryServices.*";
-        });
+        return AnalyzerVerifier.VerifyAsync(
+            source,
+            o =>
+            {
+                UsePackage(o);
+                o.EditorConfig =
+                    "null_oblivious_analyzer.excluded_assemblies = System.DirectoryServices.*";
+            }
+        );
     }
 }
