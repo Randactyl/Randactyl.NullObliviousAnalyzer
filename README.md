@@ -64,6 +64,8 @@ dotnet add package Randactyl.NullObliviousAnalyzer
 
 The package contains only the analyzer DLL under `analyzers/dotnet/cs` and this README. It has no `lib` folder and no dependencies, and it is marked as a development dependency, so it does not flow to projects that reference your project.
 
+Release notes for every version are on the [GitHub releases page](https://github.com/Randactyl/Randactyl.NullObliviousAnalyzer/releases).
+
 ### Requirements
 
 The analyzer is built against Roslyn 4.14, so it needs a compiler at least that new: .NET SDK 9.0.300 or later, or Visual Studio 2022 17.14 or later. I have tested it with .NET SDK 10.0.404 and 11.0.100. I have not tested SDK 9.0.300 or Visual Studio; the minimum comes from Microsoft's version tables.
@@ -348,6 +350,9 @@ tests/Randactyl.NullObliviousAnalyzer.Testing/   AnalyzerVerifier, the shared te
 tests/Randactyl.NullObliviousAnalyzer.Tests/     124 tests (TUnit)
 samples/DirectoryServicesSample/                 uses the analyzer through a project reference
 Randactyl.NullObliviousAnalyzer.slnx             the solution
+eng/smoke-test.sh                                installs the packed analyzer into a throwaway project
+.github/workflows/                               CI on every push, release on a v* tag
+cliff.toml                                       git-cliff configuration for the release notes
 Directory.Build.props, Directory.Packages.props  shared settings, central package versions
 global.json                                      selects the Microsoft.Testing.Platform runner
 ```
@@ -357,6 +362,9 @@ dotnet build Randactyl.NullObliviousAnalyzer.slnx                         # whol
 dotnet build samples/DirectoryServicesSample --no-incremental             # see the NOA warnings
 dotnet test                                                              # 124 tests
 dotnet pack src/Randactyl.NullObliviousAnalyzer -c Release -o artifacts/pkg   # the NuGet package
+eng/smoke-test.sh artifacts/pkg 0.1.0 11                                  # check the package in a clean project on SDK 11
 ```
+
+To release, push a tag such as `v0.1.0` that matches `<Version>` in the analyzer's `.csproj`. The release workflow runs CI, creates the GitHub release with the package attached and release notes generated from the commit messages, and pushes the package to GitHub Packages. Publishing to nuget.org is a separate step.
 
 `Directory.Build.props` sets `TreatWarningsAsErrors` for every project. The sample project lists NOA001 to NOA007 in `WarningsNotAsErrors` so that its purpose, showing the warnings, does not fail the build.
