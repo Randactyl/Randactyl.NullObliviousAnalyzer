@@ -27,7 +27,7 @@ To fix a report, declare the receiving variable nullable (`GroupPrincipal? group
 
 ## Is this for you?
 
-Use it if your project has `<Nullable>enable</Nullable>` and calls libraries that were never annotated, and you want a list of the places where null can get in unnoticed. It is an audit tool. If you want warnings only where a null can really be dereferenced, this is the wrong tool: the analyzer does not look at what happens to a value after it arrives (see [What it does not do](#what-it-does-not-do)).
+Use it if your project has `<Nullable>enable</Nullable>` and calls libraries that were never annotated, and you want a list of the places where null can get in unnoticed. It is an audit tool. If you want warnings only where a null can really be dereferenced, this is the wrong tool: the analyzer does not look at what happens to a value after it arrives (see "What it does not do" below).
 
 Terms used below:
 
@@ -56,11 +56,21 @@ Incremental builds do not run the compiler again when nothing changed, so they p
 
 ## Install
 
-An analyzer cannot be added to a project as `.cs` files. The compiler loads analyzers from compiled assemblies, so the analyzer has to be built as a separate project and the project you want to analyze must reference the result. There are two ways to do that.
+Add the package to the project you want to analyze:
 
-### Option 1: project reference to a copy of the source
+```
+dotnet add package Randactyl.NullObliviousAnalyzer
+```
 
-This is the way to drop the analyzer into a repository without publishing a package.
+The package contains only the analyzer DLL under `analyzers/dotnet/cs` and this README. It has no `lib` folder and no dependencies, and it is marked as a development dependency, so it does not flow to projects that reference your project.
+
+### Requirements
+
+The analyzer is built against Roslyn 4.14, so it needs a compiler at least that new: .NET SDK 9.0.300 or later, or Visual Studio 2022 17.14 or later. I have tested it with .NET SDK 10.0.404 and 11.0.100. I have not tested SDK 9.0.300 or Visual Studio; the minimum comes from Microsoft's version tables.
+
+### Without the package: project reference to a copy of the source
+
+An analyzer cannot be added to a project as `.cs` files. The compiler loads analyzers from compiled assemblies, so without the package the analyzer has to be built as a separate project that the project you want to analyze references.
 
 1. Copy the folder `src/Randactyl.NullObliviousAnalyzer` into your repository (for example to `tools/Randactyl.NullObliviousAnalyzer`). Leave out `bin` and `obj`.
 2. The copied project declares its two dependencies without versions, because this repository uses central package management. In your repository either add these entries to your `Directory.Packages.props`, or add a `Version` attribute to the two `PackageReference` lines in the copied `.csproj`:
@@ -79,33 +89,7 @@ This is the way to drop the analyzer into a repository without publishing a pack
 
 `ReferenceOutputAssembly="false"` keeps the analyzer out of your compile references. `OutputItemType="Analyzer"` hands its DLL to the compiler as an analyzer. The sample project uses exactly this reference.
 
-The copied project sets its own language version and nullable setting, but it still inherits the rest of your `Directory.Build.props`. This repository sets `TreatWarningsAsErrors`; if yours does too, the copied analyzer project must compile without warnings. I checked the copy-in steps in an empty scratch repository with only the two `PackageVersion` entries, and the analyzer reported as expected. The analyzer is built against Roslyn 4.14 and runs in a compiler at least that new. I have only run it with .NET SDK 11.0.100.
-
-### Option 2: the NuGet package, built locally
-
-The package is not published anywhere. Build it yourself:
-
-```
-dotnet pack src/Randactyl.NullObliviousAnalyzer -c Release -o artifacts/pkg
-```
-
-This creates `artifacts/pkg/Randactyl.NullObliviousAnalyzer.0.1.0.nupkg`. Make the folder a package source, for example with a `nuget.config` next to your solution:
-
-```xml
-<configuration>
-  <packageSources>
-    <add key="local-analyzers" value="C:\path\to\artifacts\pkg" />
-  </packageSources>
-</configuration>
-```
-
-Then reference the package from the project you want to analyze:
-
-```xml
-<PackageReference Include="Randactyl.NullObliviousAnalyzer" Version="0.1.0" PrivateAssets="all" />
-```
-
-The package contains only the analyzer DLL under `analyzers/dotnet/cs` and this README. It has no `lib` folder and no dependencies, and it is marked as a development dependency, so it does not flow to projects that reference your project. The package has no licence, repository URL or project URL yet; the owner has to choose them.
+The copied project sets its own language version and nullable setting, but it still inherits the rest of your `Directory.Build.props`. This repository sets `TreatWarningsAsErrors`; if yours does too, the copied analyzer project must compile without warnings. I checked the copy-in steps in an empty scratch repository with only the two `PackageVersion` entries, and the analyzer reported as expected.
 
 ## The rules
 
