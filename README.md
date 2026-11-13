@@ -283,7 +283,7 @@ null_oblivious_analyzer.excluded_assemblies = netstandard, mscorlib, System.*
 
 ## Known limits
 
-Each of these is pinned by a test in `tests/Randactyl.NullObliviousAnalyzer.Tests.XUnit` unless noted.
+Each of these is pinned by a test in `tests/Randactyl.NullObliviousAnalyzer.Tests` unless noted.
 
 - **A type argument inferred from an oblivious argument is not itself oblivious.** `Task.FromResult(lib.GetFoo())` reports the argument (NOA001), but the compiler infers `Task<Foo>` with a non-null `Foo`, so awaiting the task reports nothing. This is a limit of what Roslyn exposes. Test: `PinnedBehaviorTests.Type_argument_inferred_from_an_oblivious_argument_is_not_oblivious`.
 - **An explicitly typed local does not carry obliviousness.** `var inferred = lib.Array; var a = inferred[0];` reports the element (NOA005), but `Foo[] declared = lib.Array; var b = declared[0];` does not, because `declared` is a non-null `Foo[]` as far as the compiler knows. The report on `lib.Array` itself remains. Test: `PinnedBehaviorTests.Var_locals_carry_obliviousness_but_explicitly_typed_locals_do_not`.
@@ -307,7 +307,7 @@ The expected diagnostics are written into the test source with markup. `{|NOA001
 This is a real test from the suite (`CallResultTests.cs`):
 
 ```csharp
-[Fact]
+[Test]
 public Task Method_from_oblivious_assembly()
 {
     const string source = """
@@ -330,31 +330,23 @@ The analyzer needs a value that is oblivious, which means code compiled without 
 Run the tests from the repository root:
 
 ```
-dotnet test --project tests/Randactyl.NullObliviousAnalyzer.Tests.XUnit
+dotnet test
 ```
 
-Expect 123 passing tests. `--project` selects one test project. Without it, `dotnet test` in the root finds the solution file and runs both test projects (246 tests, because the suite exists once per framework; see below). `global.json` makes `dotnet test` use the Microsoft.Testing.Platform runner.
+Expect 123 passing tests. `dotnet test` in the root finds the solution file and runs the one test project. `global.json` makes it use the Microsoft.Testing.Platform runner, which TUnit is built on.
 
 Two things to know when the tests run:
 
 - They download from nuget.org: the .NET reference assemblies the in-memory compilations need, and the `System.DirectoryServices.AccountManagement` package for the integration tests. The first run needs network access.
 - The test platform sends Microsoft telemetry unless you set `DOTNET_CLI_TELEMETRY_OPTOUT=1` or `TESTINGPLATFORM_TELEMETRY_OPTOUT=1`.
 
-## Two test projects
-
-The same 123 tests exist for xUnit v3 (`tests/Randactyl.NullObliviousAnalyzer.Tests.XUnit`) and for TUnit (`tests/Randactyl.NullObliviousAnalyzer.Tests.TUnit`), as a comparison. [docs/experiments/xunit-vs-tunit.md](docs/experiments/xunit-vs-tunit.md) recommends TUnit, narrowly and with low confidence, and the owner decides which project to keep. Its three verdicts: performance is a tie, because about 98% of the time is the shared Roslyn work; the code you write goes to TUnit by a small margin (12 test scenarios written once per framework in `experiments/authoring/` came to 5% fewer lines and 9% fewer lines of framework ceremony, with the biggest gap in ordering and dependencies between tests); documentation goes to TUnit, which scored 27 against 20 out of 30 on ten tasks.
-
 ## Repository layout and build commands
 
 ```
 src/Randactyl.NullObliviousAnalyzer/             the analyzer (netstandard2.0), rules NOA001-NOA008
 tests/Randactyl.NullObliviousAnalyzer.Testing/   AnalyzerVerifier, the shared test helper
-tests/Randactyl.NullObliviousAnalyzer.Tests.XUnit/   123 tests (xUnit v3)
-tests/Randactyl.NullObliviousAnalyzer.Tests.TUnit/   the same 123 tests (TUnit)
+tests/Randactyl.NullObliviousAnalyzer.Tests/     123 tests (TUnit)
 samples/DirectoryServicesSample/                 uses the analyzer through a project reference
-docs/experiments/                                the xUnit v3 vs TUnit comparison and its raw results
-experiments/authoring/                           the same 12 test scenarios written once per framework (xUnit, TUnit); not in the solution
-eng/                                             scripts that produced that comparison
 Randactyl.NullObliviousAnalyzer.slnx             the solution
 Directory.Build.props, Directory.Packages.props  shared settings, central package versions
 global.json                                      selects the Microsoft.Testing.Platform runner
@@ -363,7 +355,7 @@ global.json                                      selects the Microsoft.Testing.P
 ```
 dotnet build Randactyl.NullObliviousAnalyzer.slnx                         # whole solution
 dotnet build samples/DirectoryServicesSample --no-incremental             # see the NOA warnings
-dotnet test --project tests/Randactyl.NullObliviousAnalyzer.Tests.XUnit   # 123 tests
+dotnet test                                                              # 123 tests
 dotnet pack src/Randactyl.NullObliviousAnalyzer -c Release -o artifacts/pkg   # the NuGet package
 ```
 
