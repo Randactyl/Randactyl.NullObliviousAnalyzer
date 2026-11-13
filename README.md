@@ -250,8 +250,8 @@ Two options exclude members by where they are declared. They exist for libraries
 
 | Option | Value | Matching |
 |---|---|---|
-| `null_oblivious_analyzer.excluded_assemblies` | Comma-separated assembly names | Case-insensitive. An entry ending in `*` is a prefix: `System.DirectoryServices.*` matches every assembly whose name starts with `System.DirectoryServices.`. |
-| `null_oblivious_analyzer.excluded_namespaces` | Comma-separated namespaces | Case-sensitive. A namespace also covers its child namespaces. `Vendor` and `Vendor.*` mean the same. A child namespace does not cover its parent. |
+| `null_oblivious_analyzer.excluded_assemblies` | Comma-separated assembly names | Case-insensitive. An entry ending in `.*` matches the name before the dot and every dotted child: `System.*` matches `System` and `System.Xml`, but not `SystemFoo`. An entry ending in `*` without a dot is a plain prefix: `Sys*` matches `System` and `SystemFoo`. |
+| `null_oblivious_analyzer.excluded_namespaces` | Comma-separated namespaces | Case-insensitive. A namespace also covers its child namespaces. `Vendor` and `Vendor.*` mean the same. A child namespace does not cover its parent. A `*` without a dot (`Ven*`) is not a wildcard in this option and matches nothing. |
 
 Whitespace around entries is ignored. Set them in an `.editorconfig` section for C# files or in a `.globalconfig`:
 
@@ -276,10 +276,10 @@ Exclusion follows the member that is used, never the types in its signature. If 
 
 ```
 [*.cs]
-null_oblivious_analyzer.excluded_assemblies = netstandard, mscorlib, System, System.*
+null_oblivious_analyzer.excluded_assemblies = netstandard, mscorlib, System.*
 ```
 
-`System.*` does not match the assembly named exactly `System`, so both entries are listed. On current .NET the base class library is annotated and this is not needed: the `net11.0` projects in this repository report nothing for BCL members.
+`System.*` matches the assembly named exactly `System` as well as `System.Xml` and the other `System.` assemblies, so one entry covers both. On current .NET the base class library is annotated and this is not needed: the `net11.0` projects in this repository report nothing for BCL members.
 
 ## Known limits
 
@@ -296,7 +296,7 @@ Each of these is pinned by a test in `tests/Randactyl.NullObliviousAnalyzer.Test
 - **Writes are not reads.** `lib.Prop = f`, `lib.Field = f`, `lib[0] = f` and `lib.Array[0] = f` assign and are not reported for the assigned member. Tests: `MemberReadTests.Plain_assignment_is_a_write_but_compound_assignment_is_a_read`, `MemberReadTests.Field_writes_are_not_reads`, `CollectionElementTests.Array_element_write_is_not_a_read`.
 - **`nameof` operands are never reported.** Tests: `CallResultTests.Nameof_operand_is_never_reported`, `MemberReadTests.Nameof_operand_is_never_reported`.
 - **Exclusions follow the member used, not the types in its signature.** See Configuration. Tests: `ConfigurationTests.Namespace_exclusion_is_decided_by_the_member_not_the_type_argument`, `ConfigurationTests.Assembly_exclusion_is_decided_by_the_member_not_the_type_argument`.
-- **Exclusions do not follow a value stored in a local variable (observed, no test).** With the defining assembly excluded, `var arr = lib.Array; foreach (var e in arr) { }` is silent for `lib.Array` but still reports NOA005 on `e`, because the iterated expression is a local and the analyzer has no member to match against the exclusion.
+- **Exclusions follow a value through an initialized local, and no further.** With the defining assembly or namespace excluded, `var arr = lib.Array; foreach (var e in arr) { }` is silent, and so are `arr[0]`, `[.. items]` and `await task` when the local was initialized from an excluded member. The analyzer follows the initializer through further locals, parentheses, implicit conversions and `await`. It does not follow a local that is assigned again anywhere in the same member, a local with no initializer, a parameter (including a lambda parameter), or any other expression. Those are still reported. Tests: `ConfigurationTests.Excluded_assembly_follows_a_local_into_foreach` and the tests next to it, `ConfigurationTests.Local_that_is_reassigned_is_still_reported`, `ConfigurationTests.Parameter_origin_cannot_be_determined_and_is_still_reported`.
 
 ## How the analyzers are tested
 
@@ -333,7 +333,7 @@ Run the tests from the repository root:
 dotnet test --project tests/Randactyl.NullObliviousAnalyzer.Tests.XUnit
 ```
 
-Expect 105 passing tests. `--project` selects one test project. Without it, `dotnet test` in the root finds the solution file and runs both test projects (210 tests, because the suite exists once per framework; see below). `global.json` makes `dotnet test` use the Microsoft.Testing.Platform runner.
+Expect 123 passing tests. `--project` selects one test project. Without it, `dotnet test` in the root finds the solution file and runs both test projects (246 tests, because the suite exists once per framework; see below). `global.json` makes `dotnet test` use the Microsoft.Testing.Platform runner.
 
 Two things to know when the tests run:
 
@@ -342,15 +342,15 @@ Two things to know when the tests run:
 
 ## Two test projects
 
-The same 105 tests exist for xUnit v3 (`tests/Randactyl.NullObliviousAnalyzer.Tests.XUnit`) and for TUnit (`tests/Randactyl.NullObliviousAnalyzer.Tests.TUnit`), as a comparison. [docs/experiments/xunit-vs-tunit.md](docs/experiments/xunit-vs-tunit.md) recommends keeping xUnit v3, and the owner decides which project to keep. Its three verdicts: performance is a tie, because about 98% of the time is the shared Roslyn work; generated code goes clearly to xUnit, since TUnit generates 3,006 lines in 16 files and a 2.4 times larger output folder; documentation goes to TUnit, which scored 27 against 20 out of 30 on ten tasks.
+The same 123 tests exist for xUnit v3 (`tests/Randactyl.NullObliviousAnalyzer.Tests.XUnit`) and for TUnit (`tests/Randactyl.NullObliviousAnalyzer.Tests.TUnit`), as a comparison. [docs/experiments/xunit-vs-tunit.md](docs/experiments/xunit-vs-tunit.md) recommends keeping xUnit v3, and the owner decides which project to keep. Its three verdicts: performance is a tie, because about 98% of the time is the shared Roslyn work; generated code goes clearly to xUnit, since TUnit generates 3,006 lines in 16 files and a 2.4 times larger output folder; documentation goes to TUnit, which scored 27 against 20 out of 30 on ten tasks.
 
 ## Repository layout and build commands
 
 ```
 src/Randactyl.NullObliviousAnalyzer/             the analyzer (netstandard2.0), rules NOA001-NOA008
 tests/Randactyl.NullObliviousAnalyzer.Testing/   AnalyzerVerifier, the shared test helper
-tests/Randactyl.NullObliviousAnalyzer.Tests.XUnit/   105 tests (xUnit v3)
-tests/Randactyl.NullObliviousAnalyzer.Tests.TUnit/   the same 105 tests (TUnit)
+tests/Randactyl.NullObliviousAnalyzer.Tests.XUnit/   123 tests (xUnit v3)
+tests/Randactyl.NullObliviousAnalyzer.Tests.TUnit/   the same 123 tests (TUnit)
 samples/DirectoryServicesSample/                 uses the analyzer through a project reference
 docs/experiments/                                the xUnit v3 vs TUnit comparison and its raw results
 eng/                                             scripts that produced that comparison
@@ -362,7 +362,7 @@ global.json                                      selects the Microsoft.Testing.P
 ```
 dotnet build Randactyl.NullObliviousAnalyzer.slnx                         # whole solution
 dotnet build samples/DirectoryServicesSample --no-incremental             # see the NOA warnings
-dotnet test --project tests/Randactyl.NullObliviousAnalyzer.Tests.XUnit   # 105 tests
+dotnet test --project tests/Randactyl.NullObliviousAnalyzer.Tests.XUnit   # 123 tests
 dotnet pack src/Randactyl.NullObliviousAnalyzer -c Release -o artifacts/pkg   # the NuGet package
 ```
 

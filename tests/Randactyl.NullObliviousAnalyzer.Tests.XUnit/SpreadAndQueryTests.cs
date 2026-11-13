@@ -43,7 +43,7 @@ public class SpreadAndQueryTests
     }
 
     [Fact]
-    public Task Spread_into_nullable_elements_or_of_annotated_elements_is_not_reported()
+    public Task Spread_into_nullable_elements_or_of_annotated_elements_reports_only_the_oblivious_container_members()
     {
         const string source = """
             using System.Collections.Generic;

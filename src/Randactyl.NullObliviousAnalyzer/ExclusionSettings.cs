@@ -47,13 +47,17 @@ internal sealed class ExclusionSettings
     {
         private readonly List<string> _assemblyNames = new();
         private readonly List<string> _assemblyPrefixes = new();
+        private readonly List<string> _assemblyFamilies = new();
         private readonly List<string> _namespaces = new();
 
         public Exclusions(string assemblies, string namespaces)
         {
             foreach (var entry in Split(assemblies))
             {
-                if (entry.EndsWith("*", StringComparison.Ordinal))
+                // `System.*` is the name `System` and everything below it; `Sys*` is a plain prefix.
+                if (entry.EndsWith(".*", StringComparison.Ordinal))
+                    _assemblyFamilies.Add(entry.Substring(0, entry.Length - 2));
+                else if (entry.EndsWith("*", StringComparison.Ordinal))
                     _assemblyPrefixes.Add(entry.Substring(0, entry.Length - 1));
                 else
                     _assemblyNames.Add(entry);
@@ -63,7 +67,7 @@ internal sealed class ExclusionSettings
                 _namespaces.Add(entry.EndsWith(".*", StringComparison.Ordinal) ? entry.Substring(0, entry.Length - 2) : entry);
         }
 
-        public bool IsEmpty => _assemblyNames.Count + _assemblyPrefixes.Count + _namespaces.Count == 0;
+        public bool IsEmpty => _assemblyNames.Count + _assemblyPrefixes.Count + _assemblyFamilies.Count + _namespaces.Count == 0;
 
         public bool Matches(ISymbol member)
         {
@@ -71,6 +75,9 @@ internal sealed class ExclusionSettings
             {
                 foreach (var name in _assemblyNames)
                     if (string.Equals(name, assembly, StringComparison.OrdinalIgnoreCase))
+                        return true;
+                foreach (var family in _assemblyFamilies)
+                    if (IsSameOrChild(assembly, family))
                         return true;
                 foreach (var prefix in _assemblyPrefixes)
                     if (assembly.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
@@ -81,12 +88,17 @@ internal sealed class ExclusionSettings
             {
                 var text = ns.ToDisplayString();
                 foreach (var excluded in _namespaces)
-                    if (text == excluded || text.StartsWith(excluded + ".", StringComparison.Ordinal))
+                    if (IsSameOrChild(text, excluded))
                         return true;
             }
 
             return false;
         }
+
+        private static bool IsSameOrChild(string name, string parent) =>
+            string.Equals(name, parent, StringComparison.OrdinalIgnoreCase)
+            || (name.Length > parent.Length && name[parent.Length] == '.'
+                && name.StartsWith(parent, StringComparison.OrdinalIgnoreCase));
 
         private static IEnumerable<string> Split(string list)
         {

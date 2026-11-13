@@ -55,15 +55,62 @@ internal static class OperationHelpers
         }
     }
 
-    /// <summary>The member whose declaration decided the type of the expression, if there is one.</summary>
-    public static ISymbol? OriginSymbol(IOperation operation) => Unwrap(operation) switch
+    /// <summary>
+    /// The member whose declaration decided the type of the expression, if there is one. A local with an
+    /// initializer is traced to the origin of that initializer, unless the local is assigned again later.
+    /// </summary>
+    public static ISymbol? OriginSymbol(IOperation operation) => OriginSymbol(operation, new HashSet<ILocalSymbol>(SymbolEqualityComparer.Default));
+
+    private static ISymbol? OriginSymbol(IOperation operation, HashSet<ILocalSymbol> visited) => Unwrap(operation) switch
     {
         IInvocationOperation invocation => invocation.TargetMethod,
         IPropertyReferenceOperation property => property.Property,
         IFieldReferenceOperation field => field.Field,
-        IArrayElementReferenceOperation element => OriginSymbol(element.ArrayReference),
+        IArrayElementReferenceOperation element => OriginSymbol(element.ArrayReference, visited),
+        IAwaitOperation await => OriginSymbol(await.Operation, visited),
+        ILocalReferenceOperation local when visited.Add(local.Local) && InitializerOf(local) is { } initializer
+            => OriginSymbol(initializer, visited),
         _ => null,
     };
+
+    /// <summary>The initializer of a local that is never written again in its member, or null when that cannot be said simply.</summary>
+    private static IOperation? InitializerOf(ILocalReferenceOperation reference)
+    {
+        var local = reference.Local;
+        if (reference.SemanticModel is not { } model
+            || local.DeclaringSyntaxReferences.Length != 1
+            || local.DeclaringSyntaxReferences[0].GetSyntax() is not VariableDeclaratorSyntax { Initializer.Value: { } value } declarator)
+            return null;
+
+        var scope = declarator.Ancestors().OfType<MemberDeclarationSyntax>().FirstOrDefault();
+        if (scope is null)
+            return null;
+        foreach (var name in scope.DescendantNodes().OfType<IdentifierNameSyntax>())
+        {
+            if (name.Identifier.ValueText != local.Name
+                || model.GetOperation(name) is not ILocalReferenceOperation other
+                || !SymbolEqualityComparer.Default.Equals(other.Local, local))
+                continue;
+            if (IsWrittenTo(other))
+                return null;
+        }
+
+        // C# binds parentheses away, so there is no operation for them.
+        while (value is ParenthesizedExpressionSyntax parenthesized)
+            value = parenthesized.Expression;
+        return model.GetOperation(value);
+    }
+
+    private static bool IsWrittenTo(IOperation reference) =>
+        IsWriteOnly(reference)
+        || reference.Parent switch
+        {
+            ICompoundAssignmentOperation compound => compound.Target == reference,
+            IIncrementOrDecrementOperation => true,
+            IArgumentOperation { Parameter.RefKind: RefKind.Ref } => true,
+            IAddressOfOperation => true,
+            _ => false,
+        };
 
     /// <summary>
     /// The type as declared, with the annotation of the declaring symbol. IOperation.Type is avoided
