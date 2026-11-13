@@ -119,7 +119,7 @@ public class DelegateAndOverrideTests
             {
                 public override void Take(Foo? f, int n) { }
                 public void Accept(Foo? f) { }
-                public void Accept(string s) { }
+                public void Accept(string? s) { }
                 public override string ToString() => "";
                 public override bool Equals(object? obj) => false;
                 public override int GetHashCode() => 0;

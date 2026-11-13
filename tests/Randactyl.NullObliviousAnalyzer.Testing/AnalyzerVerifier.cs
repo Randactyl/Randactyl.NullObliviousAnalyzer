@@ -67,7 +67,6 @@ public static class AnalyzerVerifier
         var test = new CSharpAnalyzerTest<NullObliviousAnalyzer, DefaultVerifier>
         {
             ReferenceAssemblies = references,
-            
         };
         test.TestState.Sources.Add((options.FileName, SourceText.From(source)));
 

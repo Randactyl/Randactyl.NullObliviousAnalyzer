@@ -23,7 +23,7 @@ internal static class Descriptors
         "The callee may assign a null-oblivious value of type '{1}' through parameter '{0}'");
 
     public static readonly DiagnosticDescriptor CollectionElement = Create(
-        "NOA005", "Element read from a null-oblivious collection",
+        "NOA005", "Element read, iterated or spread from a null-oblivious collection",
         "'{0}' receives an element of the null-oblivious type '{1}'");
 
     public static readonly DiagnosticDescriptor DelegateParameter = Create(
@@ -31,8 +31,8 @@ internal static class Descriptors
         "Parameter '{0}' is bound to a delegate parameter of the null-oblivious type '{1}'");
 
     public static readonly DiagnosticDescriptor OverrideParameter = Create(
-        "NOA007", "Parameter overrides or implements a null-oblivious parameter",
-        "Parameter '{0}' overrides or implements '{2}' whose parameter has the null-oblivious type '{1}'");
+        "NOA007", "Parameter or property value overrides or implements a null-oblivious one",
+        "'{0}' overrides or implements '{2}', whose incoming parameter or setter value has the null-oblivious type '{1}'");
 
     public static readonly DiagnosticDescriptor NestedOblivious = Create(
         "NOA008", "Null-oblivious reference type nested in a type argument, array element or tuple element",
