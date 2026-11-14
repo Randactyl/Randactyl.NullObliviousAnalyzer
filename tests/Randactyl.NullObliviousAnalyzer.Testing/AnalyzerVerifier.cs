@@ -65,6 +65,18 @@ public static class AnalyzerVerifier
         AnalyzerTestOptions options
     )
     {
+        var test = new CSharpAnalyzerTest<NullObliviousAnalyzer, DefaultVerifier>();
+        Configure(test, source, options);
+        return test;
+    }
+
+    /// <summary>Sets up references, sources, config files and the nullable-disabled library on any analyzer or code fix test.</summary>
+    internal static void Configure(
+        AnalyzerTest<DefaultVerifier> test,
+        string source,
+        AnalyzerTestOptions options
+    )
+    {
         var references = ReferenceAssemblies.Net.Net100;
         if (options.Packages.Count > 0)
         {
@@ -74,10 +86,7 @@ public static class AnalyzerVerifier
             references = references.AddPackages([.. packages]);
         }
 
-        var test = new CSharpAnalyzerTest<NullObliviousAnalyzer, DefaultVerifier>
-        {
-            ReferenceAssemblies = references,
-        };
+        test.ReferenceAssemblies = references;
         test.TestState.Sources.Add((options.FileName, SourceText.From(source)));
 
         if (options.EditorConfig is { } editorConfig)
@@ -114,7 +123,5 @@ public static class AnalyzerVerifier
                 return solution.WithProjectCompilationOptions(projectId, compilationOptions);
             }
         );
-
-        return test;
     }
 }
