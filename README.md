@@ -72,7 +72,12 @@ Release notes for every version are on the [GitHub releases page](https://github
 
 ### Requirements
 
-The analyzer and the code fixes are built against Roslyn 4.14, so they need a compiler at least that new: .NET SDK 9.0.300 or later, or Visual Studio 2022 17.14 or later. I have tested it with .NET SDK 10.0.404 and 11.0.100. I have not tested SDK 9.0.300 or Visual Studio; the minimum comes from Microsoft's version tables.
+The analyzer and the code fixes are built against Roslyn 4.9, the oldest version that has every API they use (4.9 added the operations for collection expressions). Whatever runs them needs Roslyn 4.9 or later; with an older one the analyzer does not load, and the build only shows a CS9057 warning instead of NOA reports.
+
+- **Builds** (`dotnet build`, CI) use the SDK's compiler: any .NET SDK from 8.0.200 on. Every supported SDK (10 and later) qualifies.
+- **Live analysis and code fixes in an IDE** use the Roslyn the IDE bundles, not the SDK's: Visual Studio 2022 17.9 or later, or a current Rider or C# Dev Kit.
+
+The tests run on the newest Roslyn (5.12) and on 4.9.2. I have run the package with .NET SDK 10.0.404 and 11.0.100; CI also runs it on SDK 8.0.2xx, the oldest host. I have not tested it in Visual Studio or Rider.
 
 ### Without the package: project reference to a copy of the source
 
@@ -82,7 +87,7 @@ An analyzer cannot be added to a project as `.cs` files. The compiler loads anal
 2. The copied project declares its two dependencies without versions, because this repository uses central package management. In your repository either add these entries to your `Directory.Packages.props`, or add a `Version` attribute to the two `PackageReference` lines in the copied `.csproj`:
 
    ```xml
-   <PackageVersion Include="Microsoft.CodeAnalysis.CSharp" Version="4.14.0" />
+   <PackageVersion Include="Microsoft.CodeAnalysis.CSharp" Version="4.9.2" />
    <PackageVersion Include="Microsoft.CodeAnalysis.Analyzers" Version="3.11.0" />
    ```
 
@@ -95,7 +100,7 @@ An analyzer cannot be added to a project as `.cs` files. The compiler loads anal
 
 `ReferenceOutputAssembly="false"` keeps the analyzer out of your compile references. `OutputItemType="Analyzer"` hands its DLL to the compiler as an analyzer. The sample project uses exactly this reference.
 
-4. Optional, for the code fixes in the IDE: copy `src/Randactyl.NullObliviousAnalyzer.CodeFixes` next to the analyzer folder, add `<PackageVersion Include="Microsoft.CodeAnalysis.CSharp.Workspaces" Version="4.14.0" />`, and add a second `ProjectReference` like the one above for `Randactyl.NullObliviousAnalyzer.CodeFixes.csproj`. The analyzer project builds with or without that folder next to it.
+4. Optional, for the code fixes in the IDE: copy `src/Randactyl.NullObliviousAnalyzer.CodeFixes` next to the analyzer folder, add `<PackageVersion Include="Microsoft.CodeAnalysis.CSharp.Workspaces" Version="4.9.2" />`, and add a second `ProjectReference` like the one above for `Randactyl.NullObliviousAnalyzer.CodeFixes.csproj`. The analyzer project builds with or without that folder next to it.
 
 The copied projects set their own language version and nullable setting, but they still inherit the rest of your `Directory.Build.props`. This repository sets `TreatWarningsAsErrors`; if yours does too, the copied projects must compile without warnings. I checked the copy-in steps in an empty scratch repository with only the `PackageVersion` entries, with and without the code fix folder, and the analyzer reported as expected.
 
@@ -342,7 +347,7 @@ Each of these is pinned by a test in `tests/Randactyl.NullObliviousAnalyzer.Test
 
 ## How the analyzers are tested
 
-Analyzer tests are ordinary unit tests that compile a small piece of C# source in memory, run the analyzer on it, and compare the diagnostics it produced with the diagnostics the test expects. This repository uses the `Microsoft.CodeAnalysis.CSharp.Analyzer.Testing` and `Microsoft.CodeAnalysis.CSharp.CodeFix.Testing` packages (version 1.1.4) for that.
+Analyzer tests are ordinary unit tests that compile a small piece of C# source in memory, run the analyzer on it, and compare the diagnostics it produced with the diagnostics the test expects. This repository uses the `Microsoft.CodeAnalysis.CSharp.Analyzer.Testing` and `Microsoft.CodeAnalysis.CSharp.CodeFix.Testing` packages (version 1.1.4) for that. The in-memory compilations use Roslyn 5.12 by default; `dotnet test -p:RoslynTestVersion=4.9.2` runs them on the version the analyzer is built against, as CI does.
 
 The expected diagnostics are written into the test source with markup. `{|NOA001:lib.GetFoo()|}` means "the analyzer must report NOA001 on exactly this span of text". The test fails if an expected diagnostic is missing, if an extra one appears, or if a span is off. Source without any markup therefore asserts that the analyzer reports nothing. Markup can be nested, as in `{|NOA001:{|NOA003:lib.Items|}.First()|}`.
 

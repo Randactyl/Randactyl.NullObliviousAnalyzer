@@ -2,13 +2,20 @@
 # Installs the packed analyzer into a throwaway project outside this repository
 # and checks that a build reports NOA warnings.
 #
-# Usage: eng/smoke-test.sh <package-dir> <version> <sdk-major>
-#   eng/smoke-test.sh artifacts/pkg 0.1.0 10
+# Usage: eng/smoke-test.sh <package-dir> <version> <sdk>
+#   eng/smoke-test.sh artifacts/pkg 0.2.0 10        # newest installed 10.0.x SDK
+#   eng/smoke-test.sh artifacts/pkg 0.2.0 8.0.200   # newest installed patch of that feature band
 set -euo pipefail
 
 pkg_dir="$(cd "$1" && pwd)"
 version="$2"
-sdk_major="$3"
+sdk="$3"
+sdk_major="${sdk%%.*}"
+if [[ "$sdk" == *.* ]]; then
+  sdk_version="$sdk"; roll_forward="latestPatch"
+else
+  sdk_version="${sdk}.0.100"; roll_forward="latestFeature"
+fi
 
 work="$(mktemp -d "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/noa-smoke.XXXXXX")"
 trap 'rm -rf "$work"' EXIT
@@ -20,7 +27,7 @@ echo '<Project />' > Directory.Build.targets
 echo '<Project><PropertyGroup><ManagePackageVersionsCentrally>false</ManagePackageVersionsCentrally></PropertyGroup></Project>' > Directory.Packages.props
 
 cat > global.json <<EOF
-{ "sdk": { "version": "${sdk_major}.0.100", "rollForward": "latestFeature", "allowPrerelease": false } }
+{ "sdk": { "version": "${sdk_version}", "rollForward": "${roll_forward}", "allowPrerelease": false } }
 EOF
 
 # A separate packages folder so a cached copy of the same version is never used.
