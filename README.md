@@ -76,8 +76,9 @@ The analyzer and the code fixes are built against Roslyn 4.9, the oldest version
 
 - **Builds** (`dotnet build`, CI) use the SDK's compiler: any .NET SDK from 8.0.200 on. Every supported SDK (10 and later) qualifies.
 - **Live analysis and code fixes in an IDE** use the Roslyn the IDE bundles, not the SDK's: Visual Studio 2022 17.9 or later, or a current Rider or C# Dev Kit.
+- **`dotnet format analyzers`** also bundles its own Roslyn, which can lag behind its SDK's compiler. SDK 8.0.2xx compiles with Roslyn 4.9 but ships a `dotnet format` with 4.8, which silently loads neither the analyzer nor the fixes. From 8.0.300 on it works.
 
-The tests run on the newest Roslyn (5.12) and on 4.9.2. I have run the package with .NET SDK 10.0.404 and 11.0.100; CI also runs it on SDK 8.0.2xx, the oldest host. I have not tested it in Visual Studio or Rider.
+The tests run on the newest Roslyn (5.12) and on 4.9.2. I have run the package with .NET SDK 8.0.206 (build), 8.0.319 (build and `dotnet format`), 10.0.404 and 11.0.100, and CI runs it on 8.0.2xx, 10 and 11. I have not tested it in Visual Studio or Rider.
 
 ### Without the package: project reference to a copy of the source
 
