@@ -329,7 +329,8 @@ Each of these is pinned by a test in `tests/Randactyl.NullObliviousAnalyzer.Test
 - **No flow analysis.** A null check handles only the value it checks; a later read of the same member is reported again. Test: `PinnedBehaviorTests.A_null_check_handles_only_the_value_it_checks_because_there_is_no_flow_analysis`.
 - **A type argument inferred from an oblivious argument is not itself oblivious.** `Task.FromResult(lib.GetFoo())` reports the argument (NOA001), but the compiler infers `Task<Foo>` with a non-null `Foo`, so awaiting the task reports nothing. Handle the argument where it arrives. This is a limit of what Roslyn exposes. Test: `PinnedBehaviorTests.Type_argument_inferred_from_an_oblivious_argument_is_not_oblivious`.
 - **Converting to a type without elements hides them.** `object o = list;` (or `IEnumerable`, non-generic) is not reported, and neither is the cast back with `(List<Foo>)o`. There is no position to compare, and the cast is a type you write yourself. Test: `PinnedBehaviorTests.Converting_to_a_type_without_nested_positions_is_not_reported`.
-- **Switch statements and switch expressions do not count as handling null**, even with a `null` arm. Only `is` patterns and `==` / `!=` comparisons do. (Not pinned by a test.)
+- **Switch statements and switch expressions do not count as handling null**, even with a `null` arm. Only `is` patterns and `==` / `!=` comparisons do. Test: `PinnedBehaviorTests.Switch_with_a_null_arm_does_not_count_as_handling_null`.
+- **A `params` element does not count as handled**, even when the element type is `object?`: `string.Format("{0}", lib.GetFoo())` is reported. Only an argument bound directly to a `T?` parameter counts. Test: `PinnedBehaviorTests.Params_element_does_not_count_as_handling_null`.
 - **Only values coming in are covered.** Passing a value by value to an oblivious method is not reported. Only `out` and `ref` arguments are. Test: `RefOutArgumentTests.By_value_arguments_are_not_reported`.
 - **Overrides are checked on the incoming side only.** NOA007 looks at parameters and setter values. A read-only property override is not reported. Test: `PropertyOverrideTests.Read_only_and_nullable_overrides_are_not_reported`.
 - **Only nullable-enabled use sites are reported.** A use inside `#nullable disable`, or inside a region with `#nullable enable warnings` (annotations off), is skipped. Tests: `CallResultTests.Use_site_inside_nullable_disable_is_not_reported`, `CallResultTests.Use_site_with_annotations_disabled_is_not_reported`.
@@ -376,7 +377,7 @@ Run the tests from the repository root:
 dotnet test
 ```
 
-Expect 152 passing tests. `dotnet test` in the root finds the solution file and runs the one test project. `global.json` makes it use the Microsoft.Testing.Platform runner, which TUnit is built on.
+Expect 154 passing tests. `dotnet test` in the root finds the solution file and runs the one test project. `global.json` makes it use the Microsoft.Testing.Platform runner, which TUnit is built on.
 
 Two things to know when the tests run:
 
@@ -389,7 +390,7 @@ Two things to know when the tests run:
 src/Randactyl.NullObliviousAnalyzer/             the analyzer (netstandard2.0), rules NOA001-NOA007 and NOA009
 src/Randactyl.NullObliviousAnalyzer.CodeFixes/   the code fixes (netstandard2.0), packed next to the analyzer
 tests/Randactyl.NullObliviousAnalyzer.Testing/   AnalyzerVerifier and CodeFixVerifier, the shared test helpers
-tests/Randactyl.NullObliviousAnalyzer.Tests/     152 tests (TUnit)
+tests/Randactyl.NullObliviousAnalyzer.Tests/     154 tests (TUnit)
 samples/DirectoryServicesSample/                 uses the analyzer and code fixes through project references
 Randactyl.NullObliviousAnalyzer.slnx             the solution
 eng/smoke-test.sh                                installs the packed analyzer into a throwaway project
@@ -402,7 +403,7 @@ global.json                                      selects the Microsoft.Testing.P
 ```
 dotnet build Randactyl.NullObliviousAnalyzer.slnx                         # whole solution
 dotnet build samples/DirectoryServicesSample --no-incremental             # see the NOA warnings
-dotnet test                                                              # 152 tests
+dotnet test                                                              # 154 tests
 dotnet pack src/Randactyl.NullObliviousAnalyzer -c Release -o artifacts/pkg   # the NuGet package
 eng/smoke-test.sh artifacts/pkg 0.2.0 11                                  # check the package in a clean project on SDK 11
 ```
