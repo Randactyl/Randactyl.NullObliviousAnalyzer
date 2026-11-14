@@ -1,0 +1,4 @@
+{
+  "setup": "dotnet restore Randactyl.NullObliviousAnalyzer.slnx",
+  "ports": 0
+}
