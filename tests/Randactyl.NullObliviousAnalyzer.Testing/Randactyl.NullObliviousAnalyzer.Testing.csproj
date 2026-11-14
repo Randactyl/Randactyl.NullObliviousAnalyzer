@@ -2,13 +2,18 @@
   <PropertyGroup>
     <TargetFramework>net11.0</TargetFramework>
     <RootNamespace>Randactyl.NullObliviousAnalyzer.Testing</RootNamespace>
+    <!--
+      The Roslyn the tests compile and analyze with: the newest by default, so current language features are covered.
+      CI also runs the tests with -p:RoslynTestVersion=4.9.2, the version the analyzer is built against.
+    -->
+    <RoslynTestVersion Condition="'$(RoslynTestVersion)' == ''">5.12.0</RoslynTestVersion>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Analyzer.Testing" />
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp.CodeFix.Testing" />
     <!-- Pin newer than the testing package's own transitive pins (old Workspaces 1.0.1, vulnerable Pkcs 9.0.6). -->
-    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" />
-    <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Workspaces" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" VersionOverride="$(RoslynTestVersion)" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Workspaces" VersionOverride="$(RoslynTestVersion)" />
     <PackageReference Include="System.Security.Cryptography.Pkcs" />
     <ProjectReference Include="..\..\src\Randactyl.NullObliviousAnalyzer\Randactyl.NullObliviousAnalyzer.csproj" />
     <ProjectReference Include="..\..\src\Randactyl.NullObliviousAnalyzer.CodeFixes\Randactyl.NullObliviousAnalyzer.CodeFixes.csproj" />
