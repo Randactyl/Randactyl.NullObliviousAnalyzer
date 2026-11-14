@@ -73,7 +73,7 @@ public class DeconstructionTests
     }
 
     [Test]
-    public Task Tuples_are_left_to_NOA008_and_annotated_deconstructors_are_not_reported()
+    public Task Unread_tuple_targets_and_annotated_deconstructors_are_not_reported()
     {
         const string source = """
             class Pair { public void Deconstruct(out string a, out string b) { a = ""; b = ""; } }
@@ -81,7 +81,7 @@ public class DeconstructionTests
             {
                 void M(Lib lib, Pair pair)
                 {
-                    var (a, n) = {|NOA008:lib.GetPair()|};
+                    var (a, n) = lib.GetPair();
                     var (b, c) = pair;
                     var (d, e) = (1, 2);
                 }

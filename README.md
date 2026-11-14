@@ -123,7 +123,7 @@ public class Legacy
 | NOA005 | An element of an oblivious collection that is read from an array, iterated, spread or bound to a query range variable | Warning |
 | NOA006 | A lambda, anonymous method or method group parameter bound to an oblivious delegate parameter | Warning |
 | NOA007 | An override or interface implementation whose parameter or setter value is oblivious in the base member | Warning |
-| NOA008 | A value whose type is not oblivious itself but contains an oblivious type argument, array element or tuple element | Info |
+| NOA009 | An oblivious type argument, array element or tuple element that reaches a type declaring it non-null | Warning |
 
 ### NOA001: call result
 
@@ -186,22 +186,13 @@ class Derived : Legacy
 }
 ```
 
-### NOA008: nested oblivious type
+### NOA009: nested oblivious type declared non-null
 
-Message: `'Legacy.GetPair()' has type '(Foo, int)' which contains a null-oblivious reference type`.
+Message: `'lib.Items.ToArray()' has null-oblivious elements or type arguments of type 'Foo', and 'Foo[]' declares them non-null`.
 
 ```csharp
-var pair = lib.GetPair();
+Foo[] items = lib.Items.ToArray();
 ```
-
-NOA008 is the only rule that defaults to Info, and Info diagnostics do not appear in `dotnet build` output. Its subject is different from the others. The value itself is not oblivious (a tuple, a `List<Foo>`, an array, a `ValueTask<Foo>` is never null-oblivious by itself); only something inside it is. Nothing is reported on the inner value until it comes out, and the other rules report it then (for example NOA005 when you iterate). A tuple deconstructed with `var (a, n) = pair` is the exception: no other rule reports it (see the limits below), so NOA008 is the only signal. Because it can fire on every intermediate LINQ result, I kept it at Info so it does not drown the warnings. To see it in the build, raise it in `.editorconfig`:
-
-```
-[*.cs]
-dotnet_diagnostic.NOA008.severity = warning
-```
-
-NOA008 is not reported when the value is awaited, iterated or spread right where it is produced and that step already produces a NOA001 or NOA005 report, because the report would only repeat it.
 
 ## What it does not do
 

@@ -13,6 +13,7 @@ internal static class Libs
         public delegate void Handler(object sender, EventArgs e);
         public delegate void FooAction(Foo f);
         public delegate Foo FooFactory();
+        public delegate void ListAction(List<Foo> items);
 
         public class Lib
         {
@@ -37,6 +38,7 @@ internal static class Libs
             public int[] Ints;
             public List<Foo> Items;
             public List<string> Names;
+            public List<Foo[]> Groups;
 
             public Task<Foo> GetFooAsync() => null;
             public ValueTask<Foo> GetFooValueAsync() => default;
@@ -56,6 +58,7 @@ internal static class Libs
             public void Subscribe(Handler h) { }
             public void SubscribeFoo(FooAction a) { }
             public void Each(Action<Foo> a) { }
+            public void EachList(ListAction a) { }
 
             public T Resolve<T>() => default;
             public Task<T> ResolveAsync<T>() => null;
@@ -97,6 +100,7 @@ internal static class Libs
         public abstract class BaseWithParams
         {
             public virtual void Take(Foo f, int n) { }
+            public virtual void TakeList(List<Foo> items) { }
         }
 
         public class Wrapper { public Foo Inner; public string Label; }

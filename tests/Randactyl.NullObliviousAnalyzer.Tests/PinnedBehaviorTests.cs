@@ -25,7 +25,7 @@ public class PinnedBehaviorTests
     }
 
     [Test]
-    public Task Var_locals_carry_obliviousness_but_explicitly_typed_locals_do_not()
+    public Task Var_locals_carry_obliviousness_and_explicitly_typed_locals_are_reported_where_assigned()
     {
         const string source = """
             class C
@@ -34,7 +34,7 @@ public class PinnedBehaviorTests
                 {
                     var inferred = {|NOA003:lib.Array|};
                     var a = {|NOA005:inferred[0]|};
-                    Foo[] declared = {|NOA003:lib.Array|};
+                    Foo[] declared = {|NOA009:{|NOA003:lib.Array|}|};
                     var b = declared[0];
                 }
             }
@@ -72,6 +72,27 @@ public class PinnedBehaviorTests
                 {
                     var task = {|NOA001:lib.GetFooAsync()|};
                     var foo = {|NOA001:await task|};
+                }
+            }
+            """;
+        return AnalyzerVerifier.VerifyAsync(source, Libs.Oblivious);
+    }
+
+    [Test]
+    public Task Converting_to_a_type_without_nested_positions_is_not_reported()
+    {
+        // object has no element type to compare, and the cast back is a type the developer declares.
+        const string source = """
+            using System.Collections.Generic;
+            using System.Linq;
+            class C
+            {
+                void M(Lib lib)
+                {
+                    var list = {|NOA003:lib.Items|}.ToList();
+                    object boxed = list;
+                    var back = (List<Foo>)boxed;
+                    back[0].ToString();
                 }
             }
             """;

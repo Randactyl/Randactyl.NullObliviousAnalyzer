@@ -58,12 +58,11 @@ internal static class Descriptors
         "'{0}' overrides or implements '{2}', whose incoming parameter or setter value has the null-oblivious type '{1}'"
     );
 
-    public static readonly DiagnosticDescriptor NestedOblivious = Create(
-        "NOA008",
-        "noa008-nested-oblivious-type",
-        "Null-oblivious reference type nested in a type argument, array element or tuple element",
-        "'{0}' has type '{1}' which contains a null-oblivious reference type",
-        DiagnosticSeverity.Info
+    public static readonly DiagnosticDescriptor NestedObliviousLost = Create(
+        "NOA009",
+        "noa009-nested-oblivious-type-declared-non-null",
+        "Null-oblivious type argument, array element or tuple element is declared non-null",
+        "'{0}' has null-oblivious elements or type arguments of type '{1}', and '{2}' declares them non-null"
     );
 
     private static DiagnosticDescriptor Create(
