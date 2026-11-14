@@ -41,7 +41,7 @@ public class DirectoryServicesIntegrationTests
             {
                 void Each(GroupPrincipal group)
                 {
-                    foreach (Principal {|NOA005:p|} in {|NOA002:group.Members|}) { }
+                    foreach (Principal {|NOA005:p|} in {|NOA002:group.Members|}) { p.Dispose(); }
                 }
             }
             """;

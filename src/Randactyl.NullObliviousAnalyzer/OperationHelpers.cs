@@ -37,6 +37,104 @@ internal static class OperationHelpers
         return false;
     }
 
+    /// <summary>
+    /// True when the code that consumes the value deals with null, or hands the value to a declaration that the
+    /// compiler's nullable analysis treats as maybe-null. Storing it in a nullable variable is not enough: the
+    /// compiler gives an oblivious value a not-null state and the variable takes that state over.
+    /// </summary>
+    public static bool IsNullHandled(IOperation operation)
+    {
+        if (IsNullForgiven(operation.Syntax))
+            return true;
+
+        var current = operation;
+        while (true)
+        {
+            var parent = current.Parent;
+            switch (parent)
+            {
+                case IParenthesizedOperation:
+                case IConversionOperation { IsImplicit: true, Conversion.IsUserDefined: false }:
+                    current = parent;
+                    continue;
+                case IConversionOperation { IsImplicit: false } conversion:
+                    return conversion.Syntax is CastExpressionSyntax { Type: NullableTypeSyntax };
+                // The receiver is checked, and the value a conditional access produces is maybe-null.
+                case IConditionalAccessOperation:
+                    return true;
+                case ICoalesceOperation coalesce:
+                    return coalesce.Value == current;
+                case ICoalesceAssignmentOperation coalesce:
+                    return coalesce.Target == current;
+                // `is var x` matches null and gives x the value's not-null state.
+                case IIsPatternOperation pattern:
+                    return pattern.Pattern is not IDeclarationPatternOperation { MatchesNull: true };
+                case IBinaryOperation
+                {
+                    OperatorKind: BinaryOperatorKind.Equals or BinaryOperatorKind.NotEquals
+                } comparison:
+                    return IsNullLiteral(
+                        comparison.LeftOperand == current
+                            ? comparison.RightOperand
+                            : comparison.LeftOperand
+                    );
+                case IArgumentOperation argument:
+                    return argument.Parameter is
+                        {
+                            RefKind: RefKind.None,
+                            NullableAnnotation: NullableAnnotation.Annotated
+                        };
+                case IReturnOperation @return:
+                    return ReturnAnnotation(@return) == NullableAnnotation.Annotated;
+                default:
+                    return false;
+            }
+        }
+    }
+
+    private static bool IsNullForgiven(SyntaxNode syntax)
+    {
+        var parent = syntax.Parent;
+        while (parent is ParenthesizedExpressionSyntax)
+            parent = parent.Parent;
+        return parent is PostfixUnaryExpressionSyntax postfix
+            && postfix.IsKind(SyntaxKind.SuppressNullableWarningExpression);
+    }
+
+    private static bool IsNullLiteral(IOperation operation) =>
+        Unwrap(operation).ConstantValue is { HasValue: true, Value: null };
+
+    /// <summary>The declared annotation of the value a return or yield return produces for the caller.</summary>
+    private static NullableAnnotation ReturnAnnotation(IReturnOperation @return)
+    {
+        IMethodSymbol? method = null;
+        for (var current = @return.Parent; current is not null; current = current.Parent)
+        {
+            if (current is IAnonymousFunctionOperation function)
+            {
+                method = function.Symbol;
+                break;
+            }
+            if (current is ILocalFunctionOperation local)
+            {
+                method = local.Symbol;
+                break;
+            }
+        }
+        method ??=
+            @return.SemanticModel?.GetEnclosingSymbol(@return.Syntax.SpanStart) as IMethodSymbol;
+        if (method is null)
+            return NullableAnnotation.None;
+
+        // yield return produces the element; return in an async method produces the task's result.
+        if (
+            (@return.Kind == OperationKind.YieldReturn || method.IsAsync)
+            && method.ReturnType is INamedTypeSymbol { TypeArguments.Length: 1 } wrapper
+        )
+            return wrapper.TypeArgumentNullableAnnotations[0];
+        return method.ReturnNullableAnnotation;
+    }
+
     /// <summary>Skips implicit conversions and parentheses so the expression that carries the declared type is found.</summary>
     public static IOperation Unwrap(IOperation operation)
     {
@@ -96,25 +194,55 @@ internal static class OperationHelpers
         )
             return null;
 
-        var scope = declarator.Ancestors().OfType<MemberDeclarationSyntax>().FirstOrDefault();
-        if (scope is null)
+        if (References(local, declarator, model).Any(IsWrittenTo))
             return null;
-        foreach (var name in scope.DescendantNodes().OfType<IdentifierNameSyntax>())
-        {
-            if (
-                name.Identifier.ValueText != local.Name
-                || model.GetOperation(name) is not ILocalReferenceOperation other
-                || !SymbolEqualityComparer.Default.Equals(other.Local, local)
-            )
-                continue;
-            if (IsWrittenTo(other))
-                return null;
-        }
 
         // C# binds parentheses away, so there is no operation for them.
         while (value is ParenthesizedExpressionSyntax parenthesized)
             value = parenthesized.Expression;
         return model.GetOperation(value);
+    }
+
+    /// <summary>
+    /// True when a variable that receives an oblivious value where it is declared is never written again and every
+    /// read of it handles null (see <see cref="IsNullHandled"/>). A variable that is never read is handled too.
+    /// </summary>
+    public static bool IsNullHandledVariable(
+        ISymbol variable,
+        SyntaxNode declaration,
+        SemanticModel model
+    ) =>
+        References(variable, declaration, model)
+            .All(reference =>
+                IsInsideNameof(reference) || (!IsWrittenTo(reference) && IsNullHandled(reference))
+            );
+
+    /// <summary>The references to a local or parameter within the member (or top-level program) that declares it.</summary>
+    private static IEnumerable<IOperation> References(
+        ISymbol variable,
+        SyntaxNode declaration,
+        SemanticModel model
+    )
+    {
+        var member = declaration.Ancestors().OfType<MemberDeclarationSyntax>().FirstOrDefault();
+        // Top-level statements are separate members that share their locals.
+        SyntaxNode? scope = member is GlobalStatementSyntax ? member.Parent : member;
+        if (scope is null)
+            yield break;
+        foreach (var name in scope.DescendantNodes().OfType<IdentifierNameSyntax>())
+        {
+            if (name.Identifier.ValueText != variable.Name)
+                continue;
+            var operation = model.GetOperation(name);
+            var symbol = operation switch
+            {
+                ILocalReferenceOperation local => (ISymbol)local.Local,
+                IParameterReferenceOperation parameter => parameter.Parameter,
+                _ => null,
+            };
+            if (SymbolEqualityComparer.Default.Equals(symbol, variable))
+                yield return operation!;
+        }
     }
 
     private static bool IsWrittenTo(IOperation reference) =>
@@ -269,16 +397,6 @@ internal static class OperationHelpers
         foreach (var contract in type.AllInterfaces.OrderBy(i => i.TypeArguments.Length == 0))
             yield return contract;
     }
-
-    public static NullableAnnotation DeclaredNullableAnnotation(ISymbol symbol) =>
-        symbol switch
-        {
-            ILocalSymbol local => local.NullableAnnotation,
-            IFieldSymbol field => field.NullableAnnotation,
-            IPropertySymbol property => property.NullableAnnotation,
-            IParameterSymbol parameter => parameter.NullableAnnotation,
-            _ => NullableAnnotation.None,
-        };
 
     public static Location? ForEachVariableLocation(CommonForEachStatementSyntax syntax) =>
         syntax switch

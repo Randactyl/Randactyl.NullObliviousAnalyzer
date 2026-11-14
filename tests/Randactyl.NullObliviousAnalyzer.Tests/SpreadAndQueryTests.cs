@@ -123,7 +123,7 @@ public class SpreadAndQueryTests
             {
                 async Task M(Lib lib)
                 {
-                    await foreach (var {|NOA005:x|} in {|NOA001:lib.StreamAsync()|}) { }
+                    await foreach (var {|NOA005:x|} in {|NOA001:lib.StreamAsync()|}) { x.ToString(); }
                 }
             }
             """;

@@ -65,7 +65,7 @@ public class NestedObliviousTests
     {
         const string source = """
             using System.Linq;
-            class C { void M(Lib lib) { foreach (var {|NOA005:x|} in {|NOA003:lib.Items|}.ToArray()) { } } }
+            class C { void M(Lib lib) { foreach (var {|NOA005:x|} in {|NOA003:lib.Items|}.ToArray()) { x.ToString(); } } }
             """;
         return AnalyzerVerifier.VerifyAsync(source, Libs.Oblivious);
     }

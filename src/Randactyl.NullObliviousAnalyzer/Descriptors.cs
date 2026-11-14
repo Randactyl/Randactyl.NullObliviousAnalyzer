@@ -33,8 +33,8 @@ internal static class Descriptors
     public static readonly DiagnosticDescriptor RefOrOutArgument = Create(
         "NOA004",
         "noa004-out-ref-and-deconstruction",
-        "out/ref argument may receive a null-oblivious reference type",
-        "The callee may assign a null-oblivious value of type '{1}' through parameter '{0}'"
+        "out/ref argument or deconstruction target receives a null-oblivious reference type",
+        "'{0}' may receive a null-oblivious value of type '{1}'"
     );
 
     public static readonly DiagnosticDescriptor CollectionElement = Create(
