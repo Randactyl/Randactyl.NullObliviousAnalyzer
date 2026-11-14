@@ -1,6 +1,7 @@
 <Solution>
   <Folder Name="/src/">
     <Project Path="src/Randactyl.NullObliviousAnalyzer/Randactyl.NullObliviousAnalyzer.csproj" />
+    <Project Path="src/Randactyl.NullObliviousAnalyzer.CodeFixes/Randactyl.NullObliviousAnalyzer.CodeFixes.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Randactyl.NullObliviousAnalyzer.Testing/Randactyl.NullObliviousAnalyzer.Testing.csproj" />
