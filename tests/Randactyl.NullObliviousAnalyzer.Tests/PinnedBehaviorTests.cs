@@ -98,4 +98,46 @@ public class PinnedBehaviorTests
             """;
         return AnalyzerVerifier.VerifyAsync(source, Libs.Oblivious);
     }
+
+    [Test]
+    public Task Switch_with_a_null_arm_does_not_count_as_handling_null()
+    {
+        const string source = """
+            class C
+            {
+                void M(Lib lib)
+                {
+                    switch ({|NOA001:lib.GetFoo()|})
+                    {
+                        case null:
+                            break;
+                        default:
+                            break;
+                    }
+                    var n = {|NOA001:lib.GetFoo()|} switch
+                    {
+                        null => 0,
+                        _ => 1,
+                    };
+                }
+            }
+            """;
+        return AnalyzerVerifier.VerifyAsync(source, Libs.Oblivious);
+    }
+
+    [Test]
+    public Task Params_element_does_not_count_as_handling_null()
+    {
+        // Only a by-value argument bound directly to a T? parameter counts; a params element is not checked.
+        const string source = """
+            class C
+            {
+                void M(Lib lib)
+                {
+                    var s = string.Format("{0}{1}{2}{3}", 1, 2, 3, {|NOA001:lib.GetFoo()|});
+                }
+            }
+            """;
+        return AnalyzerVerifier.VerifyAsync(source, Libs.Oblivious);
+    }
 }
