@@ -7,14 +7,14 @@ namespace Randactyl.NullObliviousAnalyzer.Tests;
 public class PinnedBehaviorTests
 {
     [Test]
-    public Task Null_checked_values_are_still_reported_because_there_is_no_flow_analysis()
+    public Task A_null_check_handles_only_the_value_it_checks_because_there_is_no_flow_analysis()
     {
         const string source = """
             class C
             {
                 void M(Lib lib)
                 {
-                    if ({|NOA002:lib.Prop|} != null)
+                    if (lib.Prop != null)
                     {
                         var x = {|NOA002:lib.Prop|};
                     }

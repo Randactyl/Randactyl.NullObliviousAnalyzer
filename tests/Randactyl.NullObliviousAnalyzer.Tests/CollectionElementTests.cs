@@ -62,9 +62,9 @@ public class CollectionElementTests
             {
                 void M(Lib lib)
                 {
-                    foreach (Foo {|NOA005:a|} in {|NOA003:lib.Array|}) { }
-                    foreach (var {|NOA005:b|} in {|NOA003:lib.Items|}) { }
-                    foreach (var {|NOA005:c|} in {|NOA003:lib.Names|}) { }
+                    foreach (Foo {|NOA005:a|} in {|NOA003:lib.Array|}) { a.ToString(); }
+                    foreach (var {|NOA005:b|} in {|NOA003:lib.Items|}) { b.ToString(); }
+                    foreach (var {|NOA005:c|} in {|NOA003:lib.Names|}) { c.ToString(); }
                 }
             }
             """;

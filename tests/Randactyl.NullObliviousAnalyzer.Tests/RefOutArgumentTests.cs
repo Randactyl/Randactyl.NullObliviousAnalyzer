@@ -17,6 +17,7 @@ public class RefOutArgumentTests
                     Foo f;
                     lib.Fill({|NOA004:out f|});
                     lib.Fill({|NOA004:out var g|});
+                    g.ToString();
                     lib.Swap({|NOA004:ref f|});
                 }
             }
@@ -31,7 +32,7 @@ public class RefOutArgumentTests
             #nullable disable
             public class Local { public void Get(out string s) { s = null; } }
             #nullable enable
-            class C { void M(Local l) { l.Get({|NOA004:out var s|}); } }
+            class C { void M(Local l) { l.Get({|NOA004:out var s|}); s.ToString(); } }
             """;
         return AnalyzerVerifier.VerifyAsync(source);
     }

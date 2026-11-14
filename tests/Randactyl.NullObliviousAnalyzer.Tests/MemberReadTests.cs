@@ -44,7 +44,7 @@ public class MemberReadTests
     }
 
     [Test]
-    public Task Plain_assignment_is_a_write_but_compound_assignment_is_a_read()
+    public Task Plain_assignment_is_a_write_and_coalesce_assignment_is_handled()
     {
         const string source = """
             class C
@@ -53,7 +53,7 @@ public class MemberReadTests
                 {
                     lib.Prop = f;
                     lib[0] = f;
-                    {|NOA002:lib.Prop|} ??= f;
+                    lib.Prop ??= f;
                     var x = new Lib { Prop = f };
                     var y = {|NOA002:lib.Prop|}.ToString();
                 }
@@ -158,10 +158,10 @@ public class MemberReadTests
     }
 
     [Test]
-    public Task Field_writes_are_not_reads()
+    public Task Field_writes_are_not_reads_and_coalesce_assignment_is_handled()
     {
         const string source = """
-            class C { void M(Lib lib, Foo f) { lib.Field = f; var x = new Lib { Field = f }; {|NOA003:lib.Field|} ??= f; } }
+            class C { void M(Lib lib, Foo f) { lib.Field = f; var x = new Lib { Field = f }; lib.Field ??= f; } }
             """;
         return AnalyzerVerifier.VerifyAsync(source, Libs.Oblivious);
     }
