@@ -3,17 +3,6 @@ using Microsoft.CodeAnalysis;
 
 namespace Randactyl.NullObliviousAnalyzer;
 
-internal enum Obliviousness
-{
-    None,
-
-    /// <summary>The type itself is oblivious.</summary>
-    Oblivious,
-
-    /// <summary>The type is not oblivious but a type argument, array element or tuple element is.</summary>
-    Nested,
-}
-
 /// <summary>The one place that decides what "null-oblivious" means.</summary>
 internal static class ObliviousTypes
 {
@@ -29,15 +18,6 @@ internal static class ObliviousTypes
             || type is ITypeParameterSymbol { IsValueType: false }
         )
         && annotation == NullableAnnotation.None;
-
-    public static Obliviousness Classify(ITypeSymbol? type, NullableAnnotation annotation)
-    {
-        if (type is null)
-            return Obliviousness.None;
-        if (IsOblivious(type, annotation))
-            return Obliviousness.Oblivious;
-        return ContainsOblivious(type) ? Obliviousness.Nested : Obliviousness.None;
-    }
 
     public static bool ContainsOblivious(ITypeSymbol type)
     {

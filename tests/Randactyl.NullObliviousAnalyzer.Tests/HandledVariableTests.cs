@@ -102,11 +102,11 @@ public class HandledVariableTests
             {
                 void M(Lib lib)
                 {
-                    var ({|NOA004:a|}, n) = {|NOA008:lib.GetPair()|};
+                    var ({|NOA004:a|}, n) = lib.GetPair();
                     var x = a.Count;
-                    var (b, m) = {|NOA008:lib.GetPair()|};
+                    var (b, m) = lib.GetPair();
                     var y = b?.Name;
-                    (Foo? {|NOA004:c|}, int k) = {|NOA008:lib.GetPair()|};
+                    (Foo? {|NOA004:c|}, int k) = lib.GetPair();
                     var z = c.Count;
                 }
             }

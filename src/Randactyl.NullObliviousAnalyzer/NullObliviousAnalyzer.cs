@@ -19,6 +19,10 @@ public sealed class NullObliviousAnalyzer : DiagnosticAnalyzer
 {
     private static readonly SymbolDisplayFormat TypeFormat =
         SymbolDisplayFormat.MinimallyQualifiedFormat;
+    private static readonly SymbolDisplayFormat AnnotatedTypeFormat =
+        SymbolDisplayFormat.MinimallyQualifiedFormat.AddMiscellaneousOptions(
+            SymbolDisplayMiscellaneousOptions.IncludeNullableReferenceTypeModifier
+        );
     private static readonly SymbolDisplayFormat MemberFormat =
         SymbolDisplayFormat.CSharpShortErrorMessageFormat;
 
@@ -31,7 +35,7 @@ public sealed class NullObliviousAnalyzer : DiagnosticAnalyzer
             Descriptors.CollectionElement,
             Descriptors.DelegateParameter,
             Descriptors.OverrideParameter,
-            Descriptors.NestedOblivious
+            Descriptors.NestedObliviousLost
         );
 
     public override void Initialize(AnalysisContext context)
@@ -65,6 +69,16 @@ public sealed class NullObliviousAnalyzer : DiagnosticAnalyzer
             );
             start.RegisterOperationAction(analysis.AnalyzeArgument, OperationKind.Argument);
             start.RegisterOperationAction(
+                analysis.AnalyzeNestedSource,
+                OperationKind.Invocation,
+                OperationKind.PropertyReference,
+                OperationKind.FieldReference,
+                OperationKind.LocalReference,
+                OperationKind.ParameterReference,
+                OperationKind.ArrayElementReference,
+                OperationKind.Await
+            );
+            start.RegisterOperationAction(
                 analysis.AnalyzeArrayElement,
                 OperationKind.ArrayElementReference
             );
@@ -97,15 +111,7 @@ public sealed class NullObliviousAnalyzer : DiagnosticAnalyzer
             var invocation = (IInvocationOperation)context.Operation;
             // Where / Select / OrderBy... the compiler binds for query clauses: the values they carry are
             // reported where they enter, at the range variable and at the members read from it.
-            if (
-                invocation.Syntax
-                is QueryClauseSyntax
-                    or SelectOrGroupClauseSyntax
-                    or OrderingSyntax
-                    or QueryBodySyntax
-                    or QueryExpressionSyntax
-                    or QueryContinuationSyntax
-            )
+            if (IsQueryClause(invocation.Syntax))
                 return;
             var method = invocation.TargetMethod;
             var (type, annotation) = ObliviousTypes.ReturnOf(compilation, method);
@@ -211,6 +217,34 @@ public sealed class NullObliviousAnalyzer : DiagnosticAnalyzer
             );
         }
 
+        // ---- NOA009: nested oblivious positions declared non-null ----
+
+        public void AnalyzeNestedSource(OperationAnalysisContext context)
+        {
+            var operation = context.Operation;
+            if (
+                IsQueryClause(operation.Syntax)
+                || OperationHelpers.IsWriteOnly(operation)
+                || OperationHelpers.IsInsideNameof(operation)
+                || OperationHelpers.IsNullForgiven(operation.Syntax)
+            )
+                return;
+            var (type, _) = operation is IAwaitOperation await
+                ? OperationHelpers.AwaitResult(compilation, await)
+                : OperationHelpers.DeclaredType(compilation, operation);
+            if (type is null || !ObliviousTypes.ContainsOblivious(type))
+                return;
+            ReportNestedLost(
+                context.ReportDiagnostic,
+                operation.SemanticModel,
+                operation.Syntax.GetLocation(),
+                type,
+                OperationHelpers.NestedTarget(compilation, operation),
+                OperationHelpers.OriginSymbol(operation),
+                Describe(operation)
+            );
+        }
+
         // ---- NOA004: out / ref ----
 
         public void AnalyzeArgument(OperationAnalysisContext context)
@@ -222,9 +256,28 @@ public sealed class NullObliviousAnalyzer : DiagnosticAnalyzer
             )
                 return;
             var (type, annotation) = ObliviousTypes.TypeOf(compilation, parameter);
+            var receiver = argument.Value is IDeclarationExpressionOperation declaration
+                ? declaration.Expression
+                : argument.Value;
+            ReportNestedLost(
+                context.ReportDiagnostic,
+                argument.SemanticModel,
+                argument.Syntax.GetLocation(),
+                type,
+                OperationHelpers.DeclaredType(compilation, receiver).Type is { } received
+                    ? (
+                        received,
+                        receiver is ILocalReferenceOperation local
+                            ? OperationHelpers.TypeSyntaxOf(local.Local)
+                            : null
+                    )
+                    : null,
+                parameter.ContainingSymbol,
+                argument.Value.Syntax.ToString()
+            );
             // `out var x` declares the variable right where the value arrives, so it can be handled at its reads.
             if (
-                ObliviousTypes.Classify(type, annotation) == Obliviousness.Oblivious
+                ObliviousTypes.IsOblivious(type, annotation)
                 && argument.Value
                     is IDeclarationExpressionOperation
                     {
@@ -312,14 +365,27 @@ public sealed class NullObliviousAnalyzer : DiagnosticAnalyzer
                     continue;
                 }
 
+                if (TargetOf(model, slot) is not var (location, name, declaration))
+                    continue;
+                var variable = declaration is not null
+                    ? model.GetDeclaredSymbol(declaration)
+                    : model.GetSymbolInfo(slot).Symbol;
+                ReportNestedLost(
+                    report,
+                    model,
+                    location,
+                    element.Type,
+                    OperationHelpers.FromSymbol(variable),
+                    element.Origin,
+                    name
+                );
                 // A tuple literal element is reported where it is produced.
-                if (element.Literal is not null || TargetOf(model, slot) is not var (location, name, declaration))
+                if (element.Literal is not null)
                     continue;
                 if (
                     declaration is not null
-                    && ObliviousTypes.Classify(element.Type, element.Annotation)
-                        == Obliviousness.Oblivious
-                    && model.GetDeclaredSymbol(declaration) is { } variable
+                    && ObliviousTypes.IsOblivious(element.Type, element.Annotation)
+                    && variable is not null
                     && OperationHelpers.IsNullHandledVariable(variable, declaration, model)
                 )
                     continue;
@@ -331,7 +397,6 @@ public sealed class NullObliviousAnalyzer : DiagnosticAnalyzer
                     element.Annotation,
                     element.Origin,
                     Descriptors.RefOrOutArgument,
-                    allowNested: true,
                     name,
                     null
                 );
@@ -457,8 +522,7 @@ public sealed class NullObliviousAnalyzer : DiagnosticAnalyzer
                 annotation,
                 OperationHelpers.OriginSymbol(element),
                 Descriptors.CollectionElement,
-                Describe(element),
-                allowNested: false
+                Describe(element)
             );
         }
 
@@ -484,12 +548,25 @@ public sealed class NullObliviousAnalyzer : DiagnosticAnalyzer
 
             if (OperationHelpers.ForEachVariableLocation(syntax) is not { } location)
                 return;
+            var variable =
+                syntax is ForEachStatementSyntax single
+                    ? model.GetDeclaredSymbol(single, context.CancellationToken)
+                    : null;
+            if (variable is not null)
+                ReportNestedLost(
+                    context.ReportDiagnostic,
+                    model,
+                    location,
+                    type,
+                    OperationHelpers.FromSymbol(variable),
+                    origin,
+                    variable.Name
+                );
             // A single iteration variable is declared right where the element arrives.
             if (
-                syntax is ForEachStatementSyntax single
-                && ObliviousTypes.Classify(type, annotation) == Obliviousness.Oblivious
-                && model.GetDeclaredSymbol(single, context.CancellationToken) is { } variable
-                && OperationHelpers.IsNullHandledVariable(variable, single, model)
+                variable is not null
+                && ObliviousTypes.IsOblivious(type, annotation)
+                && OperationHelpers.IsNullHandledVariable(variable, syntax, model)
             )
                 return;
             Report(
@@ -500,7 +577,6 @@ public sealed class NullObliviousAnalyzer : DiagnosticAnalyzer
                 annotation,
                 origin,
                 Descriptors.CollectionElement,
-                allowNested: false,
                 syntax is ForEachStatementSyntax named ? named.Identifier.Text : "iteration variable",
                 null
             );
@@ -530,7 +606,6 @@ public sealed class NullObliviousAnalyzer : DiagnosticAnalyzer
                 annotation,
                 OperationHelpers.OriginSymbol(spread.Operand),
                 Descriptors.CollectionElement,
-                allowNested: false,
                 Describe(spread),
                 null
             );
@@ -581,7 +656,6 @@ public sealed class NullObliviousAnalyzer : DiagnosticAnalyzer
                 element.Annotation,
                 OperationHelpers.OriginSymbol(collection),
                 Descriptors.CollectionElement,
-                allowNested: false,
                 identifier.Text,
                 null
             );
@@ -605,17 +679,25 @@ public sealed class NullObliviousAnalyzer : DiagnosticAnalyzer
             )
             {
                 var parameter = lambda.Symbol.Parameters[i];
-                if (
-                    parameter.NullableAnnotation == NullableAnnotation.Annotated
-                    || parameter.DeclaringSyntaxReferences.IsEmpty
-                )
+                if (parameter.DeclaringSyntaxReferences.IsEmpty)
                     continue;
                 var declaration = parameter
                     .DeclaringSyntaxReferences[0]
                     .GetSyntax(context.CancellationToken);
                 var (type, annotation) = ObliviousTypes.TypeOf(compilation, invoke.Parameters[i]);
+                ReportNestedLost(
+                    context.ReportDiagnostic,
+                    lambda.SemanticModel,
+                    declaration.GetLocation(),
+                    type,
+                    OperationHelpers.FromSymbol(parameter),
+                    invoke.Parameters[i].ContainingSymbol,
+                    parameter.Name
+                );
+                if (parameter.NullableAnnotation == NullableAnnotation.Annotated)
+                    continue;
                 if (
-                    ObliviousTypes.Classify(type, annotation) == Obliviousness.Oblivious
+                    ObliviousTypes.IsOblivious(type, annotation)
                     && lambda.SemanticModel is { } model
                     && OperationHelpers.IsNullHandledVariable(parameter, declaration, model)
                 )
@@ -641,6 +723,15 @@ public sealed class NullObliviousAnalyzer : DiagnosticAnalyzer
             )
             {
                 var parameter = group.Method.Parameters[i];
+                ReportNestedLost(
+                    context.ReportDiagnostic,
+                    group.SemanticModel,
+                    group.Syntax.GetLocation(),
+                    ObliviousTypes.TypeOf(compilation, invoke.Parameters[i]).Type,
+                    OperationHelpers.FromSymbol(parameter),
+                    invoke.Parameters[i].ContainingSymbol,
+                    parameter.Name
+                );
                 if (parameter.NullableAnnotation != NullableAnnotation.Annotated)
                     ReportDelegateParameter(
                         context,
@@ -667,7 +758,6 @@ public sealed class NullObliviousAnalyzer : DiagnosticAnalyzer
                 annotation,
                 delegateParameter.ContainingSymbol,
                 Descriptors.DelegateParameter,
-                allowNested: false,
                 name,
                 null
             );
@@ -753,7 +843,6 @@ public sealed class NullObliviousAnalyzer : DiagnosticAnalyzer
             if (
                 property.SetMethod is null
                 || baseProperty.SetMethod is null
-                || property.NullableAnnotation == NullableAnnotation.Annotated
                 || property.DeclaringSyntaxReferences.IsEmpty
             )
                 return;
@@ -768,6 +857,17 @@ public sealed class NullObliviousAnalyzer : DiagnosticAnalyzer
             if (typeSyntax is null)
                 return;
             var (type, annotation) = ObliviousTypes.TypeOf(compilation, baseProperty);
+            ReportNestedLost(
+                context.ReportDiagnostic,
+                null,
+                typeSyntax.GetLocation(),
+                type,
+                (property.Type, typeSyntax),
+                baseProperty,
+                property.Name
+            );
+            if (property.NullableAnnotation == NullableAnnotation.Annotated)
+                return;
             Report(
                 context.ReportDiagnostic,
                 null,
@@ -776,7 +876,6 @@ public sealed class NullObliviousAnalyzer : DiagnosticAnalyzer
                 annotation,
                 baseProperty,
                 Descriptors.OverrideParameter,
-                allowNested: false,
                 property.Name,
                 baseProperty.ToDisplayString(MemberFormat)
             );
@@ -792,17 +891,25 @@ public sealed class NullObliviousAnalyzer : DiagnosticAnalyzer
             for (var i = 0; i < Math.Min(parameters.Length, baseParameters.Length); i++)
             {
                 var parameter = parameters[i];
-                // Declaring `string?` makes the override safe even though callers of the base can pass null.
-                if (
-                    parameter.NullableAnnotation == NullableAnnotation.Annotated
-                    || parameter.DeclaringSyntaxReferences.IsEmpty
-                )
+                if (parameter.DeclaringSyntaxReferences.IsEmpty)
                     continue;
                 var location = parameter
                     .DeclaringSyntaxReferences[0]
                     .GetSyntax(context.CancellationToken)
                     .GetLocation();
                 var (type, annotation) = ObliviousTypes.TypeOf(compilation, baseParameters[i]);
+                ReportNestedLost(
+                    context.ReportDiagnostic,
+                    null,
+                    location,
+                    type,
+                    OperationHelpers.FromSymbol(parameter),
+                    baseMember,
+                    parameter.Name
+                );
+                // Declaring `string?` makes the override safe even though callers of the base can pass null.
+                if (parameter.NullableAnnotation == NullableAnnotation.Annotated)
+                    continue;
                 Report(
                     context.ReportDiagnostic,
                     null,
@@ -811,7 +918,6 @@ public sealed class NullObliviousAnalyzer : DiagnosticAnalyzer
                     annotation,
                     baseMember,
                     Descriptors.OverrideParameter,
-                    allowNested: false,
                     parameter.Name,
                     baseMember.ToDisplayString(MemberFormat)
                 );
@@ -827,16 +933,14 @@ public sealed class NullObliviousAnalyzer : DiagnosticAnalyzer
             NullableAnnotation annotation,
             ISymbol? origin,
             DiagnosticDescriptor oblivious,
-            string name,
-            bool allowNested = true
+            string name
         )
         {
-            var kind = ObliviousTypes.Classify(type, annotation);
-            if (kind == Obliviousness.None || OperationHelpers.IsInsideNameof(operation))
-                return;
-            if (kind == Obliviousness.Oblivious && OperationHelpers.IsNullHandled(operation))
-                return;
-            if (kind == Obliviousness.Nested && IsConsumedByReportedElement(operation))
+            if (
+                !ObliviousTypes.IsOblivious(type, annotation)
+                || OperationHelpers.IsInsideNameof(operation)
+                || OperationHelpers.IsNullHandled(operation)
+            )
                 return;
             Report(
                 context.ReportDiagnostic,
@@ -846,7 +950,6 @@ public sealed class NullObliviousAnalyzer : DiagnosticAnalyzer
                 annotation,
                 origin,
                 oblivious,
-                allowNested,
                 name,
                 null
             );
@@ -861,28 +964,15 @@ public sealed class NullObliviousAnalyzer : DiagnosticAnalyzer
             NullableAnnotation annotation,
             ISymbol? origin,
             DiagnosticDescriptor oblivious,
-            bool allowNested,
             string name,
             string? extra
         )
         {
-            var kind = ObliviousTypes.Classify(type, annotation);
-            if (kind == Obliviousness.None || (kind == Obliviousness.Nested && !allowNested))
+            if (!ObliviousTypes.IsOblivious(type, annotation) || !IsReported(model, location, origin))
                 return;
-            if (
-                location.SourceTree is not { } tree
-                || !(model ?? compilation.GetSemanticModel(tree))
-                    .GetNullableContext(location.SourceSpan.Start)
-                    .HasFlag(NullableContext.AnnotationsEnabled)
-                || settings.IsExcluded(origin, tree)
-            )
-                return;
-
-            var descriptor =
-                kind == Obliviousness.Oblivious ? oblivious : Descriptors.NestedOblivious;
             report(
                 Diagnostic.Create(
-                    descriptor,
+                    oblivious,
                     location,
                     name,
                     type!.ToDisplayString(TypeFormat),
@@ -892,47 +982,62 @@ public sealed class NullObliviousAnalyzer : DiagnosticAnalyzer
         }
 
         /// <summary>
-        /// A nested type that is directly awaited, iterated or spread is covered by the NOA001 / NOA005 report on
-        /// the element it yields, so NOA008 would only repeat it.
+        /// Reports NOA009 when a nested oblivious position of the source type is declared non-null by the target type.
+        /// The target's type syntax, when there is one, goes along as an additional location with the paths of the
+        /// lost positions, so a code fix can declare them nullable.
         /// </summary>
-        private bool IsConsumedByReportedElement(IOperation operation)
+        private void ReportNestedLost(
+            Action<Diagnostic> report,
+            SemanticModel? model,
+            Location location,
+            ITypeSymbol? source,
+            (ITypeSymbol Type, TypeSyntax? Syntax)? target,
+            ISymbol? origin,
+            string name
+        )
         {
-            var parent = operation.Parent;
-            while (
-                parent
-                    is IParenthesizedOperation
-                        or IConversionOperation
-                        {
-                            IsImplicit: true,
-                            Conversion.IsUserDefined: false
-                        }
-            )
-                parent = parent.Parent;
-
-            switch (parent)
-            {
-                case IAwaitOperation await:
-                    var (awaitedType, awaitedAnnotation) = OperationHelpers.AwaitResult(
-                        compilation,
-                        await
-                    );
-                    return ObliviousTypes.IsOblivious(awaitedType, awaitedAnnotation);
-                case IForEachLoopOperation loop
-                    when loop.Syntax is CommonForEachStatementSyntax
-                        && operation.SemanticModel is { } model:
-                    var (elementType, elementAnnotation) = OperationHelpers.ForEachElement(
-                        compilation,
-                        loop,
-                        model
-                    );
-                    return ObliviousTypes.IsOblivious(elementType, elementAnnotation);
-                case ISpreadOperation spread:
-                    var (spreadType, spreadAnnotation) = SpreadElement(spread);
-                    return ObliviousTypes.IsOblivious(spreadType, spreadAnnotation);
-                default:
-                    return false;
-            }
+            if (source is null || target is not var (targetType, targetSyntax))
+                return;
+            var paths = NestedPositions.LostPaths(source, targetType);
+            if (paths.Count == 0 || !IsReported(model, location, origin))
+                return;
+            report(
+                Diagnostic.Create(
+                    Descriptors.NestedObliviousLost,
+                    location,
+                    targetSyntax is null ? null : [targetSyntax.GetLocation()],
+                    targetSyntax is null
+                        ? null
+                        : ImmutableDictionary<string, string?>.Empty.Add(
+                            NestedPositions.LostPathsProperty,
+                            string.Join(";", paths.Select(p => p.Path))
+                        ),
+                    name,
+                    string.Join(
+                        "', '",
+                        paths.Select(p => p.Type.ToDisplayString(TypeFormat)).Distinct()
+                    ),
+                    targetType.ToDisplayString(AnnotatedTypeFormat)
+                )
+            );
         }
+
+        /// <summary>Reports only in nullable-enabled code and for members that are not excluded.</summary>
+        private bool IsReported(SemanticModel? model, Location location, ISymbol? origin) =>
+            location.SourceTree is { } tree
+            && (model ?? compilation.GetSemanticModel(tree))
+                .GetNullableContext(location.SourceSpan.Start)
+                .HasFlag(NullableContext.AnnotationsEnabled)
+            && !settings.IsExcluded(origin, tree);
+
+        private static bool IsQueryClause(SyntaxNode syntax) =>
+            syntax
+                is QueryClauseSyntax
+                    or SelectOrGroupClauseSyntax
+                    or OrderingSyntax
+                    or QueryBodySyntax
+                    or QueryExpressionSyntax
+                    or QueryContinuationSyntax;
 
         private static string Describe(IOperation operation)
         {

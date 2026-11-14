@@ -140,17 +140,17 @@ public class GenericTests
     }
 
     [Test]
-    public Task Substituted_type_argument_nested_in_a_value_type_is_NOA008()
+    public Task Explicit_non_null_type_argument_for_an_oblivious_type_parameter_is_NOA009()
     {
         const string source = """
             class C
             {
                 void M(Lib lib)
                 {
-                    var a = {|NOA008:lib.ResolvePair<Foo>()|};
+                    var a = {|NOA009:lib.ResolvePair<Foo>()|};
                     var b = lib.ResolvePair<int>();
                     var c = lib.ResolvePair<Foo?>();
-                    var d = {|NOA008:lib.ResolveValueAsync<Foo>()|};
+                    var d = {|NOA009:lib.ResolveValueAsync<Foo>()|};
                 }
             }
             """;

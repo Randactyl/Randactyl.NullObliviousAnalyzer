@@ -113,7 +113,7 @@ public class ConfigurationTests
         // Items is in Vendor (excluded); ToArray is in System.Collections.Generic and merely returns an oblivious Other.Else[].
         const string source = """
             using System.Linq;
-            class C { void M(Vendor.Holder h) { var a = {|NOA008:h.Items.ToArray()|}; } }
+            class C { void M(Vendor.Holder h) { Other.Else[] a = {|NOA009:h.Items.ToArray()|}; } }
             """;
         return AnalyzerVerifier.VerifyAsync(
             source,
