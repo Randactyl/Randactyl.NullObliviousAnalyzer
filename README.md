@@ -42,7 +42,7 @@ Terms used below:
 
 ## What the sample build prints
 
-`samples/DirectoryServicesSample` uses the analyzer (and its code fixes) through project references. Its `AddUser` method handles every value where it arrives and gets no reports. `PrintMembers` handles nothing yet. `dotnet build samples/DirectoryServicesSample --no-incremental` prints these warnings (paths shortened):
+`samples/DirectoryServicesSample` uses the analyzer (and its code fixes) through project references. Its `AddUser` method handles every value where it arrives and gets no reports. `PrintMembers` handles none of them, to show the reports. `dotnet build samples/DirectoryServicesSample --no-incremental` prints these warnings (paths shortened):
 
 ```
 Program.cs(44,21): warning NOA001: 'GroupPrincipal.FindByIdentity(PrincipalContext, string)' returns the null-oblivious type 'GroupPrincipal'
@@ -78,7 +78,7 @@ The analyzer and the code fixes are built against Roslyn 4.9, the oldest version
 - **Live analysis and code fixes in an IDE** use the Roslyn the IDE bundles, not the SDK's: Visual Studio 2022 17.9 or later, or a current Rider or C# Dev Kit.
 - **`dotnet format analyzers`** also bundles its own Roslyn, which can lag behind its SDK's compiler. SDK 8.0.2xx compiles with Roslyn 4.9 but ships a `dotnet format` with 4.8, which silently loads neither the analyzer nor the fixes. From 8.0.300 on it works.
 
-The tests run on the newest Roslyn (5.12) and on 4.9.2. I have run the package with .NET SDK 8.0.206 (build), 8.0.319 (build and `dotnet format`), 10.0.404 and 11.0.100, and CI runs it on 8.0.2xx, 10 and 11. I have not tested it in Visual Studio or Rider.
+CI runs the tests on Roslyn 5.12 and 4.9.2, and installs the package on SDK 8.0.2xx, 10 and 11.
 
 ### Without the package: project reference to a copy of the source
 
@@ -103,7 +103,7 @@ An analyzer cannot be added to a project as `.cs` files. The compiler loads anal
 
 4. Optional, for the code fixes in the IDE: copy `src/Randactyl.NullObliviousAnalyzer.CodeFixes` next to the analyzer folder, add `<PackageVersion Include="Microsoft.CodeAnalysis.CSharp.Workspaces" Version="4.9.2" />`, and add a second `ProjectReference` like the one above for `Randactyl.NullObliviousAnalyzer.CodeFixes.csproj`. The analyzer project builds with or without that folder next to it.
 
-The copied projects set their own language version and nullable setting, but they still inherit the rest of your `Directory.Build.props`. This repository sets `TreatWarningsAsErrors`; if yours does too, the copied projects must compile without warnings. I checked the copy-in steps in an empty scratch repository with only the `PackageVersion` entries, with and without the code fix folder, and the analyzer reported as expected.
+The copied projects set their own language version and nullable setting, but they still inherit the rest of your `Directory.Build.props`. This repository sets `TreatWarningsAsErrors`; if yours does too, the copied projects must compile without warnings.
 
 ## The rules
 
@@ -319,7 +319,7 @@ A value that applies to the file (from `.editorconfig`) wins. The global value i
 
 Exclusion follows the member that is used, never the types in its signature. If `Holder.Items` is declared in an excluded namespace but you call the LINQ method `ToArray()` on it, `ToArray()` is a different member, in `System.Linq`, and its result is still reported (as NOA009, where it lands in a declared type) unless that assembly is excluded too.
 
-**.NET Framework and netstandard2.0.** Their reference assemblies have no nullable annotations, so the whole base class library is oblivious: even `"x".Trim()` and `list[0]` are reported when you build such a project with nullable enabled. Exclude the framework assemblies there. I verified that this line removes every report for BCL members on both `netstandard2.0` and `net48`:
+**.NET Framework and netstandard2.0.** Their reference assemblies have no nullable annotations, so the whole base class library is oblivious: even `"x".Trim()` and `list[0]` are reported when you build such a project with nullable enabled. Exclude the framework assemblies there. This line removes every report for BCL members on both `netstandard2.0` and `net48`:
 
 ```
 [*.cs]
@@ -352,7 +352,7 @@ Analyzer tests are ordinary unit tests that compile a small piece of C# source i
 
 The expected diagnostics are written into the test source with markup. `{|NOA001:lib.GetFoo()|}` means "the analyzer must report NOA001 on exactly this span of text". The test fails if an expected diagnostic is missing, if an extra one appears, or if a span is off. Source without any markup therefore asserts that the analyzer reports nothing. Markup can be nested, as in `{|NOA001:{|NOA003:lib.Items|}.First()|}`.
 
-This is a real test from the suite (`CallResultTests.cs`):
+For example, from `CallResultTests.cs`:
 
 ```csharp
 [Test]
@@ -383,7 +383,7 @@ Run the tests from the repository root:
 dotnet test
 ```
 
-Expect 154 passing tests. `dotnet test` in the root finds the solution file and runs the one test project. `global.json` makes it use the Microsoft.Testing.Platform runner, which TUnit is built on.
+`dotnet test` in the root finds the solution file and runs the one test project. `global.json` makes it use the Microsoft.Testing.Platform runner, which TUnit is built on.
 
 Two things to know when the tests run:
 
@@ -396,7 +396,7 @@ Two things to know when the tests run:
 src/Randactyl.NullObliviousAnalyzer/             the analyzer (netstandard2.0), rules NOA001-NOA007 and NOA009
 src/Randactyl.NullObliviousAnalyzer.CodeFixes/   the code fixes (netstandard2.0), packed next to the analyzer
 tests/Randactyl.NullObliviousAnalyzer.Testing/   AnalyzerVerifier and CodeFixVerifier, the shared test helpers
-tests/Randactyl.NullObliviousAnalyzer.Tests/     154 tests (TUnit)
+tests/Randactyl.NullObliviousAnalyzer.Tests/     the tests (TUnit)
 samples/DirectoryServicesSample/                 uses the analyzer and code fixes through project references
 Randactyl.NullObliviousAnalyzer.slnx             the solution
 eng/smoke-test.sh                                installs the packed analyzer into a throwaway project
@@ -409,7 +409,7 @@ global.json                                      selects the Microsoft.Testing.P
 ```
 dotnet build Randactyl.NullObliviousAnalyzer.slnx                         # whole solution
 dotnet build samples/DirectoryServicesSample --no-incremental             # see the NOA warnings
-dotnet test                                                              # 154 tests
+dotnet test                                                              # run the tests
 dotnet pack src/Randactyl.NullObliviousAnalyzer -c Release -o artifacts/pkg   # the NuGet package
 eng/smoke-test.sh artifacts/pkg 0.2.0 11                                  # check the package in a clean project on SDK 11
 ```
