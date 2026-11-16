@@ -48,9 +48,9 @@ internal static class Syntax
         };
 
     /// <summary>
-    /// if (&lt;value&gt; is not { } name) &lt;exit&gt;; or `is not T name` when the variable had an explicit type. Parsed
-    /// from text so it stays on one line; the formatter only indents it. The line ends the way lines already end in
-    /// the document that holds <paramref name="position"/>.
+    /// if (&lt;value&gt; is not { } name) &lt;exit&gt;; or `is not T name` when the variable had an explicit type `T` or
+    /// `T?`. Parsed from text so it stays on one line; the formatter only indents it. The line ends the way lines
+    /// already end in the document that holds <paramref name="position"/>.
     /// </summary>
     public static StatementSyntax Guard(
         SyntaxNode position,
@@ -61,9 +61,13 @@ internal static class Syntax
         string what
     )
     {
-        var pattern = declaredType is null or { IsVar: true }
-            ? "{ }"
-            : declaredType.WithoutTrivia().ToString();
+        var pattern = declaredType switch
+        {
+            null or { IsVar: true } => "{ }",
+            // A nullable type is not allowed in a pattern (CS8116); the guard only lets non-null values through.
+            NullableTypeSyntax nullable => nullable.ElementType.WithoutTrivia().ToString(),
+            _ => declaredType.WithoutTrivia().ToString(),
+        };
         var statement = ParseStatement(
             $"if ({value.WithoutTrivia()} is not {pattern} {name}) {ExitStatement(exit, what).NormalizeWhitespace()}"
         );

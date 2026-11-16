@@ -121,6 +121,37 @@ public class CodeFixTests
     }
 
     [Test]
+    public Task Return_early_drops_the_question_mark_of_a_nullable_declared_type()
+    {
+        const string source = """
+            class C
+            {
+                void M(Lib lib)
+                {
+                    Foo? a = {|NOA001:lib.GetFoo()|};
+                    a.ToString();
+                }
+            }
+            """;
+        const string fixedSource = """
+            class C
+            {
+                void M(Lib lib)
+                {
+                    if (lib.GetFoo() is not Foo a) return;
+                    a.ToString();
+                }
+            }
+            """;
+        return CodeFixVerifier<ExpressionCodeFixProvider>.VerifyAsync(
+            source,
+            fixedSource,
+            ExpressionCodeFixProvider.ReturnKey,
+            Libs.Oblivious
+        );
+    }
+
+    [Test]
     public Task Assert_adds_the_null_forgiving_operator()
     {
         const string source = """
@@ -290,6 +321,40 @@ public class CodeFixTests
                     {
                         if (fOrNull is not Foo f) continue;
                         f.ToString();
+                    }
+                }
+            }
+            """;
+        return CodeFixVerifier<VariableCodeFixProvider>.VerifyAsync(
+            source,
+            fixedSource,
+            VariableCodeFixProvider.ContinueKey,
+            Libs.Oblivious
+        );
+    }
+
+    [Test]
+    public Task Foreach_variable_with_a_nullable_declared_type_drops_the_question_mark()
+    {
+        const string source = """
+            class C
+            {
+                void M(Lib lib)
+                {
+                    foreach (Foo? {|NOA005:e|} in lib.Array!)
+                        e.ToString();
+                }
+            }
+            """;
+        const string fixedSource = """
+            class C
+            {
+                void M(Lib lib)
+                {
+                    foreach (Foo? eOrNull in lib.Array!)
+                    {
+                        if (eOrNull is not Foo e) continue;
+                        e.ToString();
                     }
                 }
             }
