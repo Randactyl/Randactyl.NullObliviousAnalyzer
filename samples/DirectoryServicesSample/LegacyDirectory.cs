@@ -11,6 +11,8 @@ public static class LegacyDirectory
     public static void Visit(GroupPrincipal group, MemberVisitor visitor)
     {
         foreach (Principal member in group.Members)
+        {
             visitor(member);
+        }
     }
 }

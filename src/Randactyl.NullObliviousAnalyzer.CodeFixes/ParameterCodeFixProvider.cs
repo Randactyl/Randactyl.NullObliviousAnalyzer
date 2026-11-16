@@ -23,15 +23,19 @@ public sealed class ParameterCodeFixProvider : CodeFixProvider
     public const string Key = "NOA.DeclareNullable";
 
     public override ImmutableArray<string> FixableDiagnosticIds { get; } =
-        ImmutableArray.Create(DiagnosticIds.DelegateParameter, DiagnosticIds.OverrideParameter);
+    [DiagnosticIds.DelegateParameter, DiagnosticIds.OverrideParameter];
 
     public override FixAllProvider GetFixAllProvider() => WellKnownFixAllProviders.BatchFixer;
 
     public override async Task RegisterCodeFixesAsync(CodeFixContext context)
     {
-        var root = await context.Document.GetSyntaxRootAsync(context.CancellationToken).ConfigureAwait(false);
+        var root = await context
+            .Document.GetSyntaxRootAsync(context.CancellationToken)
+            .ConfigureAwait(false);
         if (root is null)
+        {
             return;
+        }
 
         foreach (var diagnostic in context.Diagnostics)
         {
@@ -56,14 +60,22 @@ public sealed class ParameterCodeFixProvider : CodeFixProvider
                 && type.Parent is BasePropertyDeclarationSyntax property
                 && property.Type == type
             )
+            {
                 context.RegisterCodeFix(
                     CodeAction.Create(
                         "Declare the property type nullable",
-                        ct => ReplaceAsync(context.Document, type, NullableType(type.WithoutTrivia()).WithTriviaFrom(type), ct),
+                        ct =>
+                            ReplaceAsync(
+                                context.Document,
+                                type,
+                                NullableType(type.WithoutTrivia()).WithTriviaFrom(type),
+                                ct
+                            ),
                         Key
                     ),
                     diagnostic
                 );
+            }
         }
     }
 
@@ -74,6 +86,7 @@ public sealed class ParameterCodeFixProvider : CodeFixProvider
     )
     {
         if (parameter.Type is { } type)
+        {
             return type is NullableTypeSyntax
                 ? document
                 : await ReplaceAsync(
@@ -83,17 +96,26 @@ public sealed class ParameterCodeFixProvider : CodeFixProvider
                         cancellationToken
                     )
                     .ConfigureAwait(false);
+        }
 
         // x => ... or (x, y) => ...: write out every parameter's type, and make this one nullable.
         var model = await document.GetSemanticModelAsync(cancellationToken).ConfigureAwait(false);
         var lambda = parameter.Ancestors().OfType<LambdaExpressionSyntax>().FirstOrDefault();
-        if (model is null || lambda is null || model.GetSymbolInfo(lambda, cancellationToken).Symbol is not IMethodSymbol method)
+        if (
+            model is null
+            || lambda is null
+            || model.GetSymbolInfo(lambda, cancellationToken).Symbol is not IMethodSymbol method
+        )
+        {
             return document;
+        }
 
         var parameters = lambda switch
         {
             SimpleLambdaExpressionSyntax simple => SingletonSeparatedList(simple.Parameter),
-            ParenthesizedLambdaExpressionSyntax parenthesized => parenthesized.ParameterList.Parameters,
+            ParenthesizedLambdaExpressionSyntax parenthesized => parenthesized
+                .ParameterList
+                .Parameters,
             _ => default,
         };
         var typed = parameters.Select(
@@ -111,9 +133,7 @@ public sealed class ParameterCodeFixProvider : CodeFixProvider
         LambdaExpressionSyntax replacement = lambda switch
         {
             SimpleLambdaExpressionSyntax simple => ParenthesizedLambdaExpression(
-                    list.WithParameters(
-                            SingletonSeparatedList(list.Parameters[0].WithoutTrivia())
-                        )
+                    list.WithParameters(SingletonSeparatedList(list.Parameters[0].WithoutTrivia()))
                         .WithTrailingTrivia(simple.Parameter.GetTrailingTrivia()),
                     simple.Body
                 )
@@ -125,7 +145,8 @@ public sealed class ParameterCodeFixProvider : CodeFixProvider
             ),
             _ => lambda,
         };
-        return await ReplaceAsync(document, lambda, replacement, cancellationToken).ConfigureAwait(false);
+        return await ReplaceAsync(document, lambda, replacement, cancellationToken)
+            .ConfigureAwait(false);
     }
 
     private static async Task<Document> ReplaceAsync(
@@ -136,6 +157,8 @@ public sealed class ParameterCodeFixProvider : CodeFixProvider
     )
     {
         var root = await document.GetSyntaxRootAsync(cancellationToken).ConfigureAwait(false);
-        return root is null ? document : document.WithSyntaxRoot(root.ReplaceNode(node, replacement));
+        return root is null
+            ? document
+            : document.WithSyntaxRoot(root.ReplaceNode(node, replacement));
     }
 }

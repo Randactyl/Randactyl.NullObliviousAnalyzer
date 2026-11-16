@@ -19,7 +19,13 @@ public static class CodeFixVerifier<TCodeFix>
         string fixedSource,
         string equivalenceKey,
         string obliviousLibrarySource
-    ) => VerifyAsync(source, fixedSource, equivalenceKey, o => o.ObliviousLibrarySource = obliviousLibrarySource);
+    ) =>
+        VerifyAsync(
+            source,
+            fixedSource,
+            equivalenceKey,
+            o => o.ObliviousLibrarySource = obliviousLibrarySource
+        );
 
     public static Task VerifyAsync(
         string source,

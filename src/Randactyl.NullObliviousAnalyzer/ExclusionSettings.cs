@@ -24,7 +24,9 @@ internal sealed class ExclusionSettings
     public bool IsExcluded(ISymbol? member, SyntaxTree useSite)
     {
         if (member is null)
+        {
             return false;
+        }
 
         var exclusions = _cache.GetOrAdd(useSite, Load);
         return !exclusions.IsEmpty && exclusions.Matches(member);
@@ -38,20 +40,19 @@ internal sealed class ExclusionSettings
 
     private string Read(AnalyzerConfigOptions treeOptions, string key)
     {
-        if (
+        return
             treeOptions.TryGetValue(key, out var value)
             || _provider.GlobalOptions.TryGetValue(key, out value)
-        )
-            return value;
-        return string.Empty;
+            ? value
+            : string.Empty;
     }
 
     private sealed class Exclusions
     {
-        private readonly List<string> _assemblyNames = new();
-        private readonly List<string> _assemblyPrefixes = new();
-        private readonly List<string> _assemblyFamilies = new();
-        private readonly List<string> _namespaces = new();
+        private readonly List<string> _assemblyNames = [];
+        private readonly List<string> _assemblyPrefixes = [];
+        private readonly List<string> _assemblyFamilies = [];
+        private readonly List<string> _namespaces = [];
 
         public Exclusions(string assemblies, string namespaces)
         {
@@ -59,19 +60,27 @@ internal sealed class ExclusionSettings
             {
                 // `System.*` is the name `System` and everything below it; `Sys*` is a plain prefix.
                 if (entry.EndsWith(".*", StringComparison.Ordinal))
+                {
                     _assemblyFamilies.Add(entry.Substring(0, entry.Length - 2));
+                }
                 else if (entry.EndsWith("*", StringComparison.Ordinal))
+                {
                     _assemblyPrefixes.Add(entry.Substring(0, entry.Length - 1));
+                }
                 else
+                {
                     _assemblyNames.Add(entry);
+                }
             }
 
             foreach (var entry in Split(namespaces))
+            {
                 _namespaces.Add(
                     entry.EndsWith(".*", StringComparison.Ordinal)
                         ? entry.Substring(0, entry.Length - 2)
                         : entry
                 );
+            }
         }
 
         public bool IsEmpty =>
@@ -86,14 +95,28 @@ internal sealed class ExclusionSettings
             if (member.ContainingAssembly?.Name is { } assembly)
             {
                 foreach (var name in _assemblyNames)
+                {
                     if (string.Equals(name, assembly, StringComparison.OrdinalIgnoreCase))
+                    {
                         return true;
+                    }
+                }
+
                 foreach (var family in _assemblyFamilies)
+                {
                     if (IsSameOrChild(assembly, family))
+                    {
                         return true;
+                    }
+                }
+
                 foreach (var prefix in _assemblyPrefixes)
+                {
                     if (assembly.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                    {
                         return true;
+                    }
+                }
             }
 
             if (
@@ -103,8 +126,12 @@ internal sealed class ExclusionSettings
             {
                 var text = ns.ToDisplayString();
                 foreach (var excluded in _namespaces)
+                {
                     if (IsSameOrChild(text, excluded))
+                    {
                         return true;
+                    }
+                }
             }
 
             return false;
@@ -124,7 +151,9 @@ internal sealed class ExclusionSettings
             {
                 var trimmed = part.Trim();
                 if (trimmed.Length > 0)
+                {
                     yield return trimmed;
+                }
             }
         }
     }

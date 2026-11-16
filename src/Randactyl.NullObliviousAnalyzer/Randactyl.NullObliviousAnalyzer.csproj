@@ -23,7 +23,9 @@
     <Copyright>Copyright (c) 2026 Randactyl</Copyright>
     <PackageReleaseNotes>https://github.com/Randactyl/Randactyl.NullObliviousAnalyzer/releases/tag/v$(Version)</PackageReleaseNotes>
     <!-- Normalizes paths in the PDB and embedded metadata for builds on GitHub Actions. -->
-    <ContinuousIntegrationBuild Condition="'$(GITHUB_ACTIONS)' == 'true'">true</ContinuousIntegrationBuild>
+    <ContinuousIntegrationBuild Condition="'$(GITHUB_ACTIONS)' == 'true'"
+      >true</ContinuousIntegrationBuild
+    >
     <!-- An analyzer package ships only the analyzer: no lib/ folder, no dependencies for consumers. -->
     <IncludeBuildOutput>false</IncludeBuildOutput>
     <SuppressDependenciesWhenPacking>true</SuppressDependenciesWhenPacking>

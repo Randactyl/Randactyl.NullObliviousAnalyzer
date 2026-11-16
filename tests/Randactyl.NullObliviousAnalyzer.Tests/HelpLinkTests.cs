@@ -6,22 +6,23 @@ using System.Threading.Tasks;
 
 namespace Randactyl.NullObliviousAnalyzer.Tests;
 
-public class HelpLinkTests
+public partial class HelpLinkTests
 {
-    private const string HelpLinkBase = "https://github.com/Randactyl/Randactyl.NullObliviousAnalyzer#";
+    private const string HelpLinkBase =
+        "https://github.com/Randactyl/Randactyl.NullObliviousAnalyzer#";
 
     [Test]
     public async Task Every_rule_links_to_its_heading_in_the_README()
     {
-        var anchors = Regex
-            .Matches(File.ReadAllText(FindReadme()), @"^#+ (.+)$", RegexOptions.Multiline)
+        var anchors = MyRegex
+            .Matches(File.ReadAllText(FindReadme()))
             .Select(m => GitHubAnchor(m.Groups[1].Value.Trim()))
             .ToHashSet();
 
         foreach (var descriptor in new NullObliviousAnalyzer().SupportedDiagnostics)
         {
             await Assert.That(descriptor.HelpLinkUri).StartsWith(HelpLinkBase);
-            var anchor = descriptor.HelpLinkUri.Substring(HelpLinkBase.Length);
+            var anchor = descriptor.HelpLinkUri[HelpLinkBase.Length..];
             await Assert.That(anchor).StartsWith(descriptor.Id.ToLowerInvariant() + "-");
             await Assert.That(anchors.Contains(anchor)).IsTrue();
         }
@@ -29,14 +30,21 @@ public class HelpLinkTests
 
     // GitHub lowercases the heading, drops punctuation other than '-' and '_', and turns spaces into '-'.
     private static string GitHubAnchor(string heading) =>
-        Regex.Replace(heading.ToLowerInvariant(), @"[^\p{L}\p{Nd}\s_-]", "").Replace(' ', '-');
+        MyRegex1.Replace(heading.ToLowerInvariant(), "").Replace(' ', '-');
 
     private static string FindReadme()
     {
-        for (var dir = new DirectoryInfo(AppContext.BaseDirectory); dir is not null; dir = dir.Parent)
+        for (
+            var dir = new DirectoryInfo(AppContext.BaseDirectory);
+            dir is not null;
+            dir = dir.Parent
+        )
         {
             var path = Path.Combine(dir.FullName, "README.md");
-            if (File.Exists(path) && File.Exists(Path.Combine(dir.FullName, "Randactyl.NullObliviousAnalyzer.slnx")))
+            if (
+                File.Exists(path)
+                && File.Exists(Path.Combine(dir.FullName, "Randactyl.NullObliviousAnalyzer.slnx"))
+            )
             {
                 return path;
             }
@@ -44,4 +52,10 @@ public class HelpLinkTests
 
         throw new FileNotFoundException("README.md not found above " + AppContext.BaseDirectory);
     }
+
+    [GeneratedRegex(@"^#+ (.+)$", RegexOptions.Multiline)]
+    private static partial Regex MyRegex { get; }
+
+    [GeneratedRegex(@"[^\p{L}\p{Nd}\s_-]")]
+    private static partial Regex MyRegex1 { get; }
 }

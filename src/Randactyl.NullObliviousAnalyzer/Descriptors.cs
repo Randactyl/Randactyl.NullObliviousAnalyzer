@@ -7,7 +7,8 @@ internal static class Descriptors
     private const string Category = "Nullability";
 
     // Each rule has a heading in README.md; the help link points at its GitHub anchor.
-    private const string HelpLinkBase = "https://github.com/Randactyl/Randactyl.NullObliviousAnalyzer#";
+    private const string HelpLinkBase =
+        "https://github.com/Randactyl/Randactyl.NullObliviousAnalyzer#";
 
     public static readonly DiagnosticDescriptor CallResult = Create(
         "NOA001",

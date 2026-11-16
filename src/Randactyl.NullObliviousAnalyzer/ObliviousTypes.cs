@@ -36,7 +36,9 @@ internal static class ObliviousTypes
                         IsOblivious(argument, named.TypeArgumentNullableAnnotations[i])
                         || ContainsOblivious(argument)
                     )
+                    {
                         return true;
+                    }
                 }
 
                 return false;
@@ -123,9 +125,15 @@ internal static class ObliviousTypes
     )
     {
         if (type is null || originalType is null)
+        {
             return (type, annotation);
+        }
+
         if (IsSubstitutedOblivious(type, annotation, originalType, originalAnnotation))
+        {
             return (type, NullableAnnotation.None);
+        }
+
         return (Rebuild(compilation, type, originalType), annotation);
     }
 
@@ -212,20 +220,31 @@ internal static class ObliviousTypes
                 }
 
                 if (!changed)
+                {
                     return named;
+                }
+
                 if (!named.IsTupleType)
+                {
                     return named.ConstructedFrom.Construct(
                         arguments.ToImmutable(),
                         annotations.ToImmutable()
                     );
+                }
+
                 if (named.TupleElements.Length != arguments.Count)
+                {
                     return named;
+                }
 
                 var names = ImmutableArray.CreateBuilder<string?>(arguments.Count);
                 foreach (var tupleElement in named.TupleElements)
+                {
                     names.Add(
                         tupleElement.IsExplicitlyNamedTupleElement ? tupleElement.Name : null
                     );
+                }
+
                 return compilation.CreateTupleTypeSymbol(
                     arguments.ToImmutable(),
                     names.ToImmutable(),

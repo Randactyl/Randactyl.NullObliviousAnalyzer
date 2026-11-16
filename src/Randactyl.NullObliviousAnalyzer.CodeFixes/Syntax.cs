@@ -56,13 +56,18 @@ internal static class Syntax
         string what
     )
     {
-        var pattern = declaredType is null or { IsVar: true } ? "{ }" : declaredType.WithoutTrivia().ToString();
+        var pattern = declaredType is null or { IsVar: true }
+            ? "{ }"
+            : declaredType.WithoutTrivia().ToString();
         var statement = ParseStatement(
             $"if ({value.WithoutTrivia()} is not {pattern} {name}) {ExitStatement(exit, what).NormalizeWhitespace()}"
         );
         // Let the simplifier shorten global::System.InvalidOperationException where System is imported.
         statement = statement.ReplaceNodes(
-            statement.DescendantNodes().OfType<ObjectCreationExpressionSyntax>().Select(creation => creation.Type),
+            statement
+                .DescendantNodes()
+                .OfType<ObjectCreationExpressionSyntax>()
+                .Select(creation => creation.Type),
             (_, type) => type.WithAdditionalAnnotations(Simplifier.Annotation)
         );
         return statement
@@ -80,7 +85,10 @@ internal static class Syntax
     /// <summary>Source text of an expression on one line, for messages.</summary>
     public static string Describe(SyntaxNode node)
     {
-        var text = string.Join(" ", node.ToString().Split((char[]?)null, System.StringSplitOptions.RemoveEmptyEntries));
+        var text = string.Join(
+            " ",
+            node.ToString().Split((char[]?)null, System.StringSplitOptions.RemoveEmptyEntries)
+        );
         return text.Length <= 60 ? text : text.Substring(0, 60) + "...";
     }
 
@@ -92,21 +100,27 @@ internal static class Syntax
             ISymbol? symbol = ancestor switch
             {
                 AnonymousFunctionExpressionSyntax lambda => model.GetSymbolInfo(lambda).Symbol,
-                LocalFunctionStatementSyntax or BaseMethodDeclarationSyntax or AccessorDeclarationSyntax =>
-                    model.GetDeclaredSymbol(ancestor),
+                LocalFunctionStatementSyntax
+                or BaseMethodDeclarationSyntax
+                or AccessorDeclarationSyntax => model.GetDeclaredSymbol(ancestor),
                 _ => null,
             };
             if (symbol is null)
+            {
                 continue;
+            }
+
             return symbol is IMethodSymbol method
                 && (
                     method.ReturnsVoid
                     || (
                         method.IsAsync
-                        && method.ReturnType is INamedTypeSymbol { Arity: 0, Name: "Task" or "ValueTask" }
+                        && method.ReturnType
+                            is INamedTypeSymbol { Arity: 0, Name: "Task" or "ValueTask" }
                     )
                 );
         }
+
         return false;
     }
 
@@ -118,7 +132,10 @@ internal static class Syntax
         var suffix = 2;
         var unique = candidate;
         while (taken.Contains(unique))
+        {
             unique = candidate + suffix++;
+        }
+
         return unique;
     }
 
@@ -130,7 +147,12 @@ internal static class Syntax
             .WithArgumentList(
                 ArgumentList(
                     SingletonSeparatedList(
-                        Argument(LiteralExpression(SyntaxKind.StringLiteralExpression, Literal(what + " is null.")))
+                        Argument(
+                            LiteralExpression(
+                                SyntaxKind.StringLiteralExpression,
+                                Literal(what + " is null.")
+                            )
+                        )
                     )
                 )
             );

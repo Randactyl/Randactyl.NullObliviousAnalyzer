@@ -1,5 +1,5 @@
-# Store and check out text files with LF line endings on every platform.
-* text=auto eol=lf
+# Store text files with LF line endings; check them out with the platform's line endings.
+* text=auto
 
 *.png binary
 *.nupkg binary

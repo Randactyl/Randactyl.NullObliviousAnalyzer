@@ -82,7 +82,10 @@ public static class AnalyzerVerifier
         {
             var packages = new List<PackageIdentity>();
             foreach (var package in options.Packages)
+            {
                 packages.Add(new PackageIdentity(package.Id, package.Version));
+            }
+
             references = references.AddPackages([.. packages]);
         }
 
@@ -96,9 +99,11 @@ public static class AnalyzerVerifier
         }
 
         if (options.GlobalConfig is { } globalConfig)
+        {
             test.TestState.AnalyzerConfigFiles.Add(
                 ("/.globalconfig", "is_global = true\n" + globalConfig)
             );
+        }
 
         if (options.ObliviousLibrarySource is { } librarySource)
         {

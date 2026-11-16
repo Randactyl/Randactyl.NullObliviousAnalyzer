@@ -24,7 +24,7 @@ public sealed class NestedCodeFixProvider : CodeFixProvider
     public const string Key = "NOA.DeclareElementsNullable";
 
     public override ImmutableArray<string> FixableDiagnosticIds { get; } =
-        ImmutableArray.Create(DiagnosticIds.NestedObliviousLost);
+    [DiagnosticIds.NestedObliviousLost];
 
     public override FixAllProvider GetFixAllProvider() => WellKnownFixAllProviders.BatchFixer;
 
@@ -34,22 +34,33 @@ public sealed class NestedCodeFixProvider : CodeFixProvider
         {
             if (
                 diagnostic.AdditionalLocations.Count == 0
-                || !diagnostic.Properties.TryGetValue(DiagnosticIds.LostPathsProperty, out var value)
+                || !diagnostic.Properties.TryGetValue(
+                    DiagnosticIds.LostPathsProperty,
+                    out var value
+                )
                 || value is null
                 || diagnostic.AdditionalLocations[0].SourceTree is not { } tree
                 || context.Document.Project.Solution.GetDocument(tree) is not { } target
             )
+            {
                 continue;
+            }
+
             var root = await tree.GetRootAsync(context.CancellationToken).ConfigureAwait(false);
             if (root.FindNode(diagnostic.AdditionalLocations[0].SourceSpan) is not TypeSyntax type)
+            {
                 continue;
+            }
+
             var paths = value
                 .Split(';')
                 .Select(path => path.Split('.').Select(int.Parse).ToArray())
                 .ToList();
             var fixedType = Annotate(type, paths, 0);
             if (fixedType is null || fixedType.IsEquivalentTo(type))
+            {
                 continue;
+            }
 
             context.RegisterCodeFix(
                 CodeAction.Create(
@@ -69,7 +80,10 @@ public sealed class NestedCodeFixProvider : CodeFixProvider
     private static TypeSyntax? Annotate(TypeSyntax type, List<int[]> paths, int depth)
     {
         if (paths.Count == 0)
+        {
             return type;
+        }
+
         switch (type)
         {
             // The top-level ? is not a position; look inside it.
@@ -86,28 +100,47 @@ public sealed class NestedCodeFixProvider : CodeFixProvider
                 for (var i = 0; i < arguments.Count; i++)
                 {
                     if (Child(arguments[i], i, paths, depth) is not { } argument)
+                    {
                         return null;
+                    }
+
                     arguments = arguments.Replace(arguments[i], argument);
                 }
-                return generic.WithTypeArgumentList(generic.TypeArgumentList.WithArguments(arguments));
+
+                return generic.WithTypeArgumentList(
+                    generic.TypeArgumentList.WithArguments(arguments)
+                );
             case QualifiedNameSyntax { Right: GenericNameSyntax right } qualified:
-                return Annotate(right, paths, depth) is SimpleNameSyntax name ? qualified.WithRight(name) : null;
+                return Annotate(right, paths, depth) is SimpleNameSyntax name
+                    ? qualified.WithRight(name)
+                    : null;
             case AliasQualifiedNameSyntax { Name: GenericNameSyntax right } aliased:
-                return Annotate(right, paths, depth) is SimpleNameSyntax aliasedName ? aliased.WithName(aliasedName) : null;
+                return Annotate(right, paths, depth) is SimpleNameSyntax aliasedName
+                    ? aliased.WithName(aliasedName)
+                    : null;
             case TupleTypeSyntax tuple:
                 var elements = tuple.Elements;
                 for (var i = 0; i < elements.Count; i++)
                 {
                     // Elements after the seventh are type arguments of the nested TRest tuple: 7.0, 7.1, ...
-                    var childPaths = i < 7
-                        ? Under(paths, depth, i)
-                        : Under(Under(paths, depth, 7), depth + 1, i - 7)
-                            .Select(p => p.Take(depth + 1).Concat(p.Skip(depth + 2)).ToArray())
-                            .ToList();
+                    var childPaths =
+                        i < 7
+                            ? Under(paths, depth, i)
+                            :
+                            [
+                                .. Under(Under(paths, depth, 7), depth + 1, i - 7)
+                                    .Select(p =>
+                                        p.Take(depth + 1).Concat(p.Skip(depth + 2)).ToArray()
+                                    ),
+                            ];
                     if (Wrap(elements[i].Type, childPaths, depth + 1) is not { } elementType)
+                    {
                         return null;
+                    }
+
                     elements = elements.Replace(elements[i], elements[i].WithType(elementType));
                 }
+
                 return tuple.WithElements(elements);
             default:
                 return null;
@@ -120,16 +153,18 @@ public sealed class NestedCodeFixProvider : CodeFixProvider
     /// <summary>Annotates inside the child, then wraps the child itself if a path ends at it.</summary>
     private static TypeSyntax? Wrap(TypeSyntax child, List<int[]> paths, int depth)
     {
-        var inner = Annotate(child, paths.Where(p => p.Length > depth).ToList(), depth);
-        if (inner is null)
-            return null;
-        return paths.Any(p => p.Length == depth) && inner is not NullableTypeSyntax
-            ? NullableType(inner.WithoutTrivia()).WithTriviaFrom(child)
-            : inner;
+        var inner = Annotate(child, [.. paths.Where(p => p.Length > depth)], depth);
+        return inner switch
+        {
+            null => null,
+            _ => paths.Any(p => p.Length == depth) && inner is not NullableTypeSyntax
+                ? NullableType(inner.WithoutTrivia()).WithTriviaFrom(child)
+                : inner,
+        };
     }
 
     private static List<int[]> Under(List<int[]> paths, int depth, int index) =>
-        paths.Where(p => p.Length > depth && p[depth] == index).ToList();
+        [.. paths.Where(p => p.Length > depth && p[depth] == index)];
 
     private static async Task<Solution> ReplaceAsync(
         Document document,

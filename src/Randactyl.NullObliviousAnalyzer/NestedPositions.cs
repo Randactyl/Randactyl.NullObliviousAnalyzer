@@ -20,7 +20,10 @@ internal static class NestedPositions
     /// separated by '.': 0 for an array element, i for the i-th type argument or tuple element. The top level of the
     /// types is not compared.
     /// </summary>
-    public static List<(string Path, ITypeSymbol Type)> LostPaths(ITypeSymbol source, ITypeSymbol target)
+    public static List<(string Path, ITypeSymbol Type)> LostPaths(
+        ITypeSymbol source,
+        ITypeSymbol target
+    )
     {
         var paths = new List<(string, ITypeSymbol)>();
         Collect(source, target, "", paths);
@@ -52,8 +55,12 @@ internal static class NestedPositions
             target is not INamedTypeSymbol { TypeArguments.Length: > 0 } named
             || Matching(source, named) is not { } match
         )
+        {
             return;
+        }
+
         for (var i = 0; i < match.TypeArguments.Length; i++)
+        {
             Collect(
                 match.TypeArguments[i],
                 match.TypeArgumentNullableAnnotations[i],
@@ -62,6 +69,7 @@ internal static class NestedPositions
                 prefix + i,
                 paths
             );
+        }
     }
 
     private static void Collect(
@@ -77,7 +85,10 @@ internal static class NestedPositions
             ObliviousTypes.IsOblivious(source, sourceAnnotation)
             && targetAnnotation == NullableAnnotation.NotAnnotated
         )
+        {
             paths.Add((path, source));
+        }
+
         Collect(source, target, path + ".", paths);
     }
 
@@ -92,9 +103,18 @@ internal static class NestedPositions
 
     private static IEnumerable<INamedTypeSymbol> Candidates(ITypeSymbol source)
     {
-        for (var current = source as INamedTypeSymbol; current is not null; current = current.BaseType)
+        for (
+            var current = source as INamedTypeSymbol;
+            current is not null;
+            current = current.BaseType
+        )
+        {
             yield return current;
+        }
+
         foreach (var contract in source.AllInterfaces)
+        {
             yield return contract;
+        }
     }
 }

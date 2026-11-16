@@ -29,6 +29,7 @@ internal static class Program
             Console.WriteLine($"No group named '{groupName}'.");
             return;
         }
+
         var user =
             UserPrincipal.FindByIdentity(context, userName)
             ?? throw new InvalidOperationException($"No user named '{userName}'.");
@@ -44,13 +45,15 @@ internal static class Program
         var group = GroupPrincipal.FindByIdentity(context, groupName);
 
         foreach (Principal member in group.Members)
+        {
             Console.WriteLine(member.Name);
+        }
 
         // A callback whose delegate type comes from unannotated code.
         LegacyDirectory.Visit(group, member => Console.WriteLine(member.DistinguishedName.Length));
 
         // List<Principal> declares the elements non-null, so later reads of them are not reported.
-        List<Principal> members = group.Members.ToList();
+        List<Principal> members = [.. group.Members];
         Console.WriteLine(members.Count);
     }
 }
