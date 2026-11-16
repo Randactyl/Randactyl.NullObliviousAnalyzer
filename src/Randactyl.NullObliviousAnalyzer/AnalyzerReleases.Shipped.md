@@ -15,3 +15,17 @@ NOA005 | Nullability | Warning | Element read, iterated or spread from a null-ob
 NOA006 | Nullability | Warning | Delegate parameter bound to a lambda or method group is null-oblivious
 NOA007 | Nullability | Warning | Parameter or property value overrides or implements a null-oblivious one
 NOA008 | Nullability | Info | Null-oblivious reference type nested in a type argument, array element or tuple element
+
+## Release 0.2.0
+
+### New Rules
+
+Rule ID | Category | Severity | Notes
+--------|----------|----------|-------
+NOA009 | Nullability | Warning | Null-oblivious type argument, array element or tuple element is declared non-null
+
+### Removed Rules
+
+Rule ID | Category | Severity | Notes
+--------|----------|----------|-------
+NOA008 | Nullability | Info | Null-oblivious reference type nested in a type argument, array element or tuple element
