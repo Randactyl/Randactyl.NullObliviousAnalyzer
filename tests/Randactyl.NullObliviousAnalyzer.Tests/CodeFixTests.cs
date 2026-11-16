@@ -186,6 +186,44 @@ public class CodeFixTests
     }
 
     [Test]
+    [Arguments("\n")]
+    [Arguments("\r\n")]
+    public Task Guard_line_ends_like_the_document(string newLine)
+    {
+        const string source = """
+            class C
+            {
+                void M(Lib lib)
+                {
+                    lib.Fill({|NOA004:out var d|});
+                    d.ToString();
+                }
+            }
+            """;
+        const string fixedSource = """
+            class C
+            {
+                void M(Lib lib)
+                {
+                    lib.Fill(out var dOrNull);
+                    if (dOrNull is not { } d) return;
+                    d.ToString();
+                }
+            }
+            """;
+        return CodeFixVerifier<VariableCodeFixProvider>.VerifyAsync(
+            WithLineEndings(source, newLine),
+            WithLineEndings(fixedSource, newLine),
+            VariableCodeFixProvider.ReturnKey,
+            Libs.Oblivious
+        );
+    }
+
+    /// <summary>The raw string literals take the test file's own line endings, which depend on the checkout.</summary>
+    private static string WithLineEndings(string text, string newLine) =>
+        text.Replace("\r\n", "\n").Replace("\n", newLine);
+
+    [Test]
     public Task Deconstruction_target_is_renamed_and_guarded()
     {
         const string source = """

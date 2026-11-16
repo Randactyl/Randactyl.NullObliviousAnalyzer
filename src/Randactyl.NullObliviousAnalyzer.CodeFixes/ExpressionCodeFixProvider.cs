@@ -177,6 +177,7 @@ public sealed class ExpressionCodeFixProvider : CodeFixProvider
     ) =>
         Syntax
             .Guard(
+                declaration,
                 value,
                 declaration.Declaration.Type,
                 declaration.Declaration.Variables[0].Identifier.ValueText,
@@ -268,6 +269,11 @@ public sealed class ExpressionCodeFixProvider : CodeFixProvider
         var root = await document.GetSyntaxRootAsync(cancellationToken).ConfigureAwait(false);
         return root is null
             ? document
-            : document.WithSyntaxRoot(root.ReplaceNode(node, replacement));
+            : await Syntax
+                .FormatAsync(
+                    document.WithSyntaxRoot(root.ReplaceNode(node, replacement)),
+                    cancellationToken
+                )
+                .ConfigureAwait(false);
     }
 }

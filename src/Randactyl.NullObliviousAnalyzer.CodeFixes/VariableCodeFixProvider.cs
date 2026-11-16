@@ -196,12 +196,17 @@ public sealed class VariableCodeFixProvider : CodeFixProvider
 
         var name = designation.Identifier.ValueText;
         var maybe = Syntax.MaybeName(model, statement, name);
-        var guard = Syntax.Guard(IdentifierName(maybe), null, name, exit, name);
+        var guard = Syntax.Guard(statement, IdentifierName(maybe), null, name, exit, name);
         var renamed = statement.ReplaceToken(
             designation.Identifier,
             Identifier(maybe).WithTriviaFrom(designation.Identifier)
         );
-        return document.WithSyntaxRoot(root.ReplaceNode(statement, [renamed, guard]));
+        return await Syntax
+            .FormatAsync(
+                document.WithSyntaxRoot(root.ReplaceNode(statement, [renamed, guard])),
+                cancellationToken
+            )
+            .ConfigureAwait(false);
     }
 
     private static async Task<Document> GuardForEachAsync(
@@ -219,10 +224,15 @@ public sealed class VariableCodeFixProvider : CodeFixProvider
 
         var name = loop.Identifier.ValueText;
         var maybe = Syntax.MaybeName(model, loop.Statement, name);
-        var guard = Syntax.Guard(IdentifierName(maybe), loop.Type, name, Exit.Continue, name);
+        var guard = Syntax.Guard(loop, IdentifierName(maybe), loop.Type, name, Exit.Continue, name);
         var fixedLoop = loop.WithIdentifier(Identifier(maybe).WithTriviaFrom(loop.Identifier))
             .WithStatement(Prepend(loop.Statement, guard));
-        return document.WithSyntaxRoot(root.ReplaceNode(loop, fixedLoop));
+        return await Syntax
+            .FormatAsync(
+                document.WithSyntaxRoot(root.ReplaceNode(loop, fixedLoop)),
+                cancellationToken
+            )
+            .ConfigureAwait(false);
     }
 
     private static async Task<Document> GuardForEachDeconstructionAsync(
@@ -241,13 +251,18 @@ public sealed class VariableCodeFixProvider : CodeFixProvider
 
         var name = designation.Identifier.ValueText;
         var maybe = Syntax.MaybeName(model, loop.Statement, name);
-        var guard = Syntax.Guard(IdentifierName(maybe), null, name, Exit.Continue, name);
+        var guard = Syntax.Guard(loop, IdentifierName(maybe), null, name, Exit.Continue, name);
         var fixedLoop = loop.ReplaceToken(
             designation.Identifier,
             Identifier(maybe).WithTriviaFrom(designation.Identifier)
         );
         fixedLoop = fixedLoop.WithStatement(Prepend(fixedLoop.Statement, guard));
-        return document.WithSyntaxRoot(root.ReplaceNode(loop, fixedLoop));
+        return await Syntax
+            .FormatAsync(
+                document.WithSyntaxRoot(root.ReplaceNode(loop, fixedLoop)),
+                cancellationToken
+            )
+            .ConfigureAwait(false);
     }
 
     private static BlockSyntax Prepend(StatementSyntax body, StatementSyntax first) =>

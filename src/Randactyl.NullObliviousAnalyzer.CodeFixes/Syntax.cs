@@ -1,7 +1,10 @@
 using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
+using Microsoft.CodeAnalysis.Formatting;
 using Microsoft.CodeAnalysis.Simplification;
 using static Microsoft.CodeAnalysis.CSharp.SyntaxFactory;
 
@@ -46,9 +49,11 @@ internal static class Syntax
 
     /// <summary>
     /// if (&lt;value&gt; is not { } name) &lt;exit&gt;; or `is not T name` when the variable had an explicit type. Parsed
-    /// from text so it stays on one line; the formatter only indents it.
+    /// from text so it stays on one line; the formatter only indents it. The line ends the way lines already end in
+    /// the document that holds <paramref name="position"/>.
     /// </summary>
     public static StatementSyntax Guard(
+        SyntaxNode position,
         ExpressionSyntax value,
         TypeSyntax? declaredType,
         string name,
@@ -72,9 +77,49 @@ internal static class Syntax
         );
         return statement
             .WithLeadingTrivia(ElasticMarker)
-            .WithTrailingTrivia(ElasticLineFeed)
-            .WithAdditionalAnnotations(Microsoft.CodeAnalysis.Formatting.Formatter.Annotation);
+            .WithTrailingTrivia(ElasticEndOfLine(NewLine(position.SyntaxTree.GetRoot())))
+            .WithAdditionalAnnotations(Formatter.Annotation);
     }
+
+    /// <summary>
+    /// Formats the nodes marked with <see cref="Formatter.Annotation"/>, breaking lines the way the document already
+    /// does, and removes the mark so the code action's own cleanup, which breaks lines with the workspace's default,
+    /// leaves them alone.
+    /// </summary>
+    public static async Task<Document> FormatAsync(
+        Document document,
+        CancellationToken cancellationToken
+    )
+    {
+        var root = await document.GetSyntaxRootAsync(cancellationToken).ConfigureAwait(false);
+        if (root is null || !root.GetAnnotatedNodes(Formatter.Annotation).Any())
+        {
+            return document;
+        }
+
+        var options = (
+            await document.GetOptionsAsync(cancellationToken).ConfigureAwait(false)
+        ).WithChangedOption(FormattingOptions.NewLine, NewLine(root));
+        document = await Formatter
+            .FormatAsync(document, Formatter.Annotation, options, cancellationToken)
+            .ConfigureAwait(false);
+        root = await document.GetSyntaxRootAsync(cancellationToken).ConfigureAwait(false);
+        return root is null
+            ? document
+            : document.WithSyntaxRoot(
+                root.ReplaceNodes(
+                    root.GetAnnotatedNodes(Formatter.Annotation),
+                    (_, node) => node.WithoutAnnotations(Formatter.Annotation)
+                )
+            );
+    }
+
+    /// <summary>The first line ending in the document, or the platform's when the document has none.</summary>
+    private static string NewLine(SyntaxNode root) =>
+        root.DescendantTrivia().FirstOrDefault(trivia => trivia.IsKind(SyntaxKind.EndOfLineTrivia))
+            is { RawKind: not 0 } endOfLine
+            ? endOfLine.ToString()
+            : System.Environment.NewLine;
 
     /// <summary>Wraps an expression in parentheses that the simplifier removes again where they are not needed.</summary>
     public static ExpressionSyntax Parenthesize(ExpressionSyntax expression) =>
