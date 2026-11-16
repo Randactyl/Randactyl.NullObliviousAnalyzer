@@ -25,7 +25,7 @@ public class SpreadAndQueryTests
     }
 
     [Test]
-    public Task Directly_spread_nested_operand_is_not_reported_by_NOA008()
+    public Task Spread_reports_the_element_and_a_var_keeps_the_nested_type()
     {
         const string source = """
             using System.Linq;
@@ -34,7 +34,7 @@ public class SpreadAndQueryTests
                 void M(Lib lib)
                 {
                     Foo[] a = [{|NOA005:.. {|NOA003:lib.Items|}.ToArray()|}];
-                    var b = {|NOA008:{|NOA003:lib.Items|}.ToArray()|};
+                    var b = {|NOA003:lib.Items|}.ToArray();
                 }
             }
             """;
@@ -123,7 +123,7 @@ public class SpreadAndQueryTests
             {
                 async Task M(Lib lib)
                 {
-                    await foreach (var {|NOA005:x|} in {|NOA001:lib.StreamAsync()|}) { }
+                    await foreach (var {|NOA005:x|} in {|NOA001:lib.StreamAsync()|}) { x.ToString(); }
                 }
             }
             """;

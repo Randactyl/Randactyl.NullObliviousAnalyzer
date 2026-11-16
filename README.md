@@ -1,8 +1,8 @@
 # Randactyl.NullObliviousAnalyzer
 
-Roslyn analyzers that list every place where a value from code without nullable annotations enters your nullable-enabled code.
+Roslyn analyzers and code fixes that report every place where a value from code without nullable annotations enters your nullable-enabled code, until your code handles it.
 
-C# nullable reference types only protect you when the compiler knows whether a value can be null. Code that was compiled without nullable annotations (an old NuGet package, a `#nullable disable` region) gives the compiler no information. The compiler calls such a value *null-oblivious* and stays silent about it. This analyzer reports each place such a value comes in, so you can decide, one by one, whether it can be null.
+C# nullable reference types only protect you when the compiler knows whether a value can be null. Code that was compiled without nullable annotations (an old NuGet package, a `#nullable disable` region) gives the compiler no information. The compiler calls such a value *null-oblivious* and stays silent about it. This analyzer reports each place such a value comes in. A report goes away once the code handles null right there, or hands the value to a declaration the compiler checks.
 
 Here is the case that motivated the project. `System.DirectoryServices.AccountManagement` ships without nullable annotations, and `FindByIdentity` returns null when nothing matches:
 
@@ -15,42 +15,46 @@ UserPrincipal user = UserPrincipal.FindByIdentity(context, userName);
 group.Members.Add(user);   // NullReferenceException if either lookup found nothing
 ```
 
-The compiler reports nothing for this code. With the analyzer installed, the build prints this for the sample project's version of that code (`Program.cs` in `samples/DirectoryServicesSample`):
+The compiler reports nothing for this code. With the analyzer installed, the build reports both lookups (NOA001) and the read of `Members` (NOA002). Handling null where each value arrives clears the reports, and the compiler's own nullable warnings take over from there:
 
-```
-Program.cs(24,32): warning NOA001: 'GroupPrincipal.FindByIdentity(PrincipalContext, string)' returns the null-oblivious type 'GroupPrincipal'
-Program.cs(25,30): warning NOA001: 'UserPrincipal.FindByIdentity(PrincipalContext, string)' returns the null-oblivious type 'UserPrincipal'
-Program.cs(27,9): warning NOA002: Reading 'GroupPrincipal.Members' yields the null-oblivious type 'PrincipalCollection'
+```csharp
+if (GroupPrincipal.FindByIdentity(context, groupName) is not { } group)
+    return;
+var user = UserPrincipal.FindByIdentity(context, userName)
+    ?? throw new InvalidOperationException($"No user named '{userName}'.");
+
+group.Members!.Add(user);   // reviewed: Members is never null for a group that was found
 ```
 
-To fix a report, declare the receiving variable nullable (`GroupPrincipal? group = ...`) and check it. The compiler's own nullable warnings then protect every later use.
+Each report has code fixes that write these forms for you (see [Resolving a report](#resolving-a-report)).
+
+Declaring the variable nullable is **not** enough: `GroupPrincipal? group = GroupPrincipal.FindByIdentity(...)` is still reported. The compiler treats an oblivious value as not null, and a nullable variable takes over that state, so `group.Members` would still compile without a warning.
 
 ## Is this for you?
 
-Use it if your project has `<Nullable>enable</Nullable>` and calls libraries that were never annotated, and you want a list of the places where null can get in unnoticed. It is an audit tool. If you want warnings only where a null can really be dereferenced, this is the wrong tool: the analyzer does not look at what happens to a value after it arrives (see "What it does not do" below).
+Use it if your project has `<Nullable>enable</Nullable>` and calls libraries that were never annotated, and you want to be sure that every place where null can get in unnoticed is found and dealt with. The goal is zero reports: each one stays until the code handles null where the value arrives, or until you suppress it after review.
 
 Terms used below:
 
 - **Null-oblivious** (or just *oblivious*): a reference type that comes from code compiled without nullable annotations. In Roslyn it is a type with `NullableAnnotation.None`. It is neither "not null" (`string`) nor "maybe null" (`string?`).
 - **Nullable-enabled code**: code where nullable annotations are on. The analyzer reports only there. A use site inside `#nullable disable` is never reported.
+- **Handled**: the code that receives the value deals with null, or passes the value on to a declaration the compiler treats as maybe-null. See [Resolving a report](#resolving-a-report).
 
 ## What the sample build prints
 
-`samples/DirectoryServicesSample` uses the analyzer through a project reference. `dotnet build samples/DirectoryServicesSample --no-incremental` prints these warnings (paths shortened):
+`samples/DirectoryServicesSample` uses the analyzer (and its code fixes) through project references. Its `AddUser` method handles every value where it arrives and gets no reports. `PrintMembers` handles none of them, to show the reports. `dotnet build samples/DirectoryServicesSample --no-incremental` prints these warnings (paths shortened):
 
 ```
-Program.cs(24,32): warning NOA001: 'GroupPrincipal.FindByIdentity(PrincipalContext, string)' returns the null-oblivious type 'GroupPrincipal'
-Program.cs(33,21): warning NOA001: 'GroupPrincipal.FindByIdentity(PrincipalContext, string)' returns the null-oblivious type 'GroupPrincipal'
-Program.cs(25,30): warning NOA001: 'UserPrincipal.FindByIdentity(PrincipalContext, string)' returns the null-oblivious type 'UserPrincipal'
-Program.cs(27,9): warning NOA002: Reading 'GroupPrincipal.Members' yields the null-oblivious type 'PrincipalCollection'
-Program.cs(35,28): warning NOA005: 'member' receives an element of the null-oblivious type 'Principal'
-Program.cs(35,38): warning NOA002: Reading 'GroupPrincipal.Members' yields the null-oblivious type 'PrincipalCollection'
-Program.cs(36,31): warning NOA002: Reading 'Principal.Name' yields the null-oblivious type 'string'
-Program.cs(39,38): warning NOA006: Parameter 'member' is bound to a delegate parameter of the null-oblivious type 'Principal'
-Program.cs(39,66): warning NOA002: Reading 'Principal.DistinguishedName' yields the null-oblivious type 'string'
+Program.cs(44,21): warning NOA001: 'GroupPrincipal.FindByIdentity(PrincipalContext, string)' returns the null-oblivious type 'GroupPrincipal'
+Program.cs(46,28): warning NOA005: 'member' receives an element of the null-oblivious type 'Principal'
+Program.cs(46,38): warning NOA002: Reading 'GroupPrincipal.Members' yields the null-oblivious type 'PrincipalCollection'
+Program.cs(50,38): warning NOA006: Parameter 'member' is bound to a delegate parameter of the null-oblivious type 'Principal'
+Program.cs(50,66): warning NOA002: Reading 'Principal.DistinguishedName' yields the null-oblivious type 'string'
+Program.cs(53,35): warning NOA002: Reading 'GroupPrincipal.Members' yields the null-oblivious type 'PrincipalCollection'
+Program.cs(53,35): warning NOA009: 'group.Members.ToList()' has null-oblivious elements or type arguments of type 'Principal', and 'List<Principal>' declares them non-null
 ```
 
-One line of code can carry several reports. Line 35 is `foreach (Principal member in group.Members)`: NOA002 for reading `Members`, and NOA005 for the `Principal` that each loop step puts into `member`. MSBuild prints every warning twice, once as it happens and once in its summary; the list above is the unique set.
+One line of code can carry several reports. Line 46 is `foreach (Principal member in group.Members)`: NOA002 for reading `Members`, and NOA005 for the `Principal` that each loop step puts into `member`. `Console.WriteLine(member.Name)` on the next line is not reported, because `Console.WriteLine` takes a `string?`, and the compiler checks what happens to the value inside it. MSBuild prints every warning twice, once as it happens and once in its summary; the list above is the unique set.
 
 Incremental builds do not run the compiler again when nothing changed, so they print no warnings. Use `--no-incremental` (or `dotnet build -t:Rebuild`) to see them again.
 
@@ -62,13 +66,19 @@ Add the package to the project you want to analyze:
 dotnet add package Randactyl.NullObliviousAnalyzer
 ```
 
-The package contains only the analyzer DLL under `analyzers/dotnet/cs` and this README. It has no `lib` folder and no dependencies, and it is marked as a development dependency, so it does not flow to projects that reference your project.
+The package contains the analyzer DLL and the code fix DLL under `analyzers/dotnet/cs`, and this README. It has no `lib` folder and no dependencies, and it is marked as a development dependency, so it does not flow to projects that reference your project. The code fixes run in the IDE and with `dotnet format analyzers`; the build only needs the analyzer.
 
 Release notes for every version are on the [GitHub releases page](https://github.com/Randactyl/Randactyl.NullObliviousAnalyzer/releases).
 
 ### Requirements
 
-The analyzer is built against Roslyn 4.14, so it needs a compiler at least that new: .NET SDK 9.0.300 or later, or Visual Studio 2022 17.14 or later. I have tested it with .NET SDK 10.0.404 and 11.0.100. I have not tested SDK 9.0.300 or Visual Studio; the minimum comes from Microsoft's version tables.
+The analyzer and the code fixes are built against Roslyn 4.9, the oldest version that has every API they use (4.9 added the operations for collection expressions). Whatever runs them needs Roslyn 4.9 or later; with an older one the analyzer does not load, and the build only shows a CS9057 warning instead of NOA reports.
+
+- **Builds** (`dotnet build`, CI) use the SDK's compiler: any .NET SDK from 8.0.200 on. Every supported SDK (10 and later) qualifies.
+- **Live analysis and code fixes in an IDE** use the Roslyn the IDE bundles, not the SDK's: Visual Studio 2022 17.9 or later, or a current Rider or C# Dev Kit.
+- **`dotnet format analyzers`** also bundles its own Roslyn, which can lag behind its SDK's compiler. SDK 8.0.2xx compiles with Roslyn 4.9 but ships a `dotnet format` with 4.8, which silently loads neither the analyzer nor the fixes. From 8.0.300 on it works.
+
+CI runs the tests on Roslyn 5.12 and 4.9.2, and installs the package on SDK 8.0.2xx, 10 and 11.
 
 ### Without the package: project reference to a copy of the source
 
@@ -78,7 +88,7 @@ An analyzer cannot be added to a project as `.cs` files. The compiler loads anal
 2. The copied project declares its two dependencies without versions, because this repository uses central package management. In your repository either add these entries to your `Directory.Packages.props`, or add a `Version` attribute to the two `PackageReference` lines in the copied `.csproj`:
 
    ```xml
-   <PackageVersion Include="Microsoft.CodeAnalysis.CSharp" Version="4.14.0" />
+   <PackageVersion Include="Microsoft.CodeAnalysis.CSharp" Version="4.9.2" />
    <PackageVersion Include="Microsoft.CodeAnalysis.Analyzers" Version="3.11.0" />
    ```
 
@@ -91,7 +101,9 @@ An analyzer cannot be added to a project as `.cs` files. The compiler loads anal
 
 `ReferenceOutputAssembly="false"` keeps the analyzer out of your compile references. `OutputItemType="Analyzer"` hands its DLL to the compiler as an analyzer. The sample project uses exactly this reference.
 
-The copied project sets its own language version and nullable setting, but it still inherits the rest of your `Directory.Build.props`. This repository sets `TreatWarningsAsErrors`; if yours does too, the copied analyzer project must compile without warnings. I checked the copy-in steps in an empty scratch repository with only the two `PackageVersion` entries, and the analyzer reported as expected.
+4. Optional, for the code fixes in the IDE: copy `src/Randactyl.NullObliviousAnalyzer.CodeFixes` next to the analyzer folder, add `<PackageVersion Include="Microsoft.CodeAnalysis.CSharp.Workspaces" Version="4.9.2" />`, and add a second `ProjectReference` like the one above for `Randactyl.NullObliviousAnalyzer.CodeFixes.csproj`. The analyzer project builds with or without that folder next to it.
+
+The copied projects set their own language version and nullable setting, but they still inherit the rest of your `Directory.Build.props`. This repository sets `TreatWarningsAsErrors`; if yours does too, the copied projects must compile without warnings.
 
 ## The rules
 
@@ -107,6 +119,7 @@ public class Legacy
     public Foo Prop { get; set; }
     public Foo Field;
     public Foo[] Array;
+    public List<Foo> Items;
     public (Foo, int) GetPair() => default;
     public void Fill(out Foo f) { f = null; }
     public void Each(FooAction a) { }
@@ -119,11 +132,13 @@ public class Legacy
 | NOA001 | A call, delegate invocation, user-defined operator or conversion, or `await` whose result is oblivious | Warning |
 | NOA002 | A property or indexer read whose type is oblivious | Warning |
 | NOA003 | A field read whose type is oblivious | Warning |
-| NOA004 | An `out` or `ref` argument, or a `Deconstruct` target, that may receive an oblivious value | Warning |
+| NOA004 | An `out` or `ref` argument, or a deconstruction target, that may receive an oblivious value | Warning |
 | NOA005 | An element of an oblivious collection that is read from an array, iterated, spread or bound to a query range variable | Warning |
 | NOA006 | A lambda, anonymous method or method group parameter bound to an oblivious delegate parameter | Warning |
 | NOA007 | An override or interface implementation whose parameter or setter value is oblivious in the base member | Warning |
-| NOA008 | A value whose type is not oblivious itself but contains an oblivious type argument, array element or tuple element | Info |
+| NOA009 | An oblivious type argument, array element or tuple element that reaches a type declaring it non-null | Warning |
+
+NOA008 (nested oblivious type, Info) existed in 0.1.0 and is replaced by NOA009.
 
 ### NOA001: call result
 
@@ -135,7 +150,7 @@ Foo a = lib.GetFoo();
 
 ### NOA002: property or indexer read
 
-Message: `Reading 'Legacy.Prop' yields the null-oblivious type 'Foo'`. A plain assignment (`lib.Prop = f;`) is a write and is not reported. A compound assignment such as `lib.Prop ??= f;` reads first and is reported.
+Message: `Reading 'Legacy.Prop' yields the null-oblivious type 'Foo'`. A plain assignment (`lib.Prop = f;`) is a write and is not reported. `lib.Prop ??= f;` reads and handles null at once, and is not reported either.
 
 ```csharp
 var b = lib.Prop;
@@ -151,10 +166,11 @@ var c = lib.Field;
 
 ### NOA004: out, ref and deconstruction
 
-Message: `The callee may assign a null-oblivious value of type 'Foo' through parameter 'f'`. The report sits on the argument. It also covers `var (a, b) = x;` when `Deconstruct` has oblivious `out` parameters; each target that is not a discard and not explicitly nullable gets a report.
+Message: `'var d' may receive a null-oblivious value of type 'Foo'`. The report sits on the argument. It also covers `var (a, b) = x;`, both when `Deconstruct` has oblivious `out` parameters and when `x` is a tuple with oblivious elements; each target that is not a discard gets a report.
 
 ```csharp
 lib.Fill(out var d);
+var (e, n) = lib.GetPair();
 ```
 
 ### NOA005: collection element
@@ -169,15 +185,15 @@ var q = from p in lib.Items select p;   // NOA005 on p
 
 ### NOA006: delegate parameter
 
-Message: `Parameter 'f' is bound to a delegate parameter of the null-oblivious type 'Foo'`. A lambda parameter you declare as nullable (`(object? s, EventArgs? e) => ...`) is not reported.
+Message: `Parameter 'f' is bound to a delegate parameter of the null-oblivious type 'Foo'`.
 
 ```csharp
-lib.Each(f => { });
+lib.Each(f => f.Name.ToString());
 ```
 
 ### NOA007: override or implementation
 
-Message: `'f' overrides or implements 'Legacy.Take(Foo)', whose incoming parameter or setter value has the null-oblivious type 'Foo'`. Callers of the base member may pass null into your override. Declaring the parameter nullable (`Foo? f`) clears the report. Properties are reported on their type only when they have a setter or `init`.
+Message: `'f' overrides or implements 'Legacy.Take(Foo)', whose incoming parameter or setter value has the null-oblivious type 'Foo'`. Callers of the base member may pass null into your override. Properties are reported on their type only when they have a setter or `init`.
 
 ```csharp
 class Derived : Legacy
@@ -186,53 +202,82 @@ class Derived : Legacy
 }
 ```
 
-### NOA008: nested oblivious type
+### NOA009: nested oblivious type declared non-null
 
-Message: `'Legacy.GetPair()' has type '(Foo, int)' which contains a null-oblivious reference type`.
+Message: `'lib.Items.ToArray()' has null-oblivious elements or type arguments of type 'Foo', and 'Foo[]' declares them non-null`.
 
 ```csharp
-var pair = lib.GetPair();
+Foo[] items = lib.Items.ToArray();
 ```
 
-NOA008 is the only rule that defaults to Info, and Info diagnostics do not appear in `dotnet build` output. Its subject is different from the others. The value itself is not oblivious (a tuple, a `List<Foo>`, an array, a `ValueTask<Foo>` is never null-oblivious by itself); only something inside it is. Nothing is reported on the inner value until it comes out, and the other rules report it then (for example NOA005 when you iterate). A tuple deconstructed with `var (a, n) = pair` is the exception: no other rule reports it (see the limits below), so NOA008 is the only signal. Because it can fire on every intermediate LINQ result, I kept it at Info so it does not drown the warnings. To see it in the build, raise it in `.editorconfig`:
+The value itself is not oblivious, but an element, type argument or tuple element inside it is. Converting it to a type that declares that position non-null (`Foo[]`, `List<Foo>`, `IEnumerable<Foo>`, `(Foo, int)`) hides the oblivious elements: nothing reports them when they come out later. The target can be a variable, a parameter, a return type, a cast, a pattern, a lambda or override parameter, or an element of a tuple or collection expression.
+
+A target that keeps them oblivious, such as a `var` local, is not reported; the elements are reported when they come out (NOA005, or NOA001 on `await`). LINQ keeps them oblivious too: `lib.Items.Where(...).ToList()` is reported once, where it lands in a declared type, not at every step.
+
+## Resolving a report
+
+A report goes away when the code that receives the value handles null right there, or passes the value on to a declaration that the compiler's nullable analysis treats as maybe-null. There is no flow analysis: a check on a later line does not count, and a check handles only the value it checks.
+
+**Handled where the value arrives** (NOA001, NOA002, NOA003, NOA005 on an element read):
+
+| Code | Why it counts |
+|---|---|
+| `lib.GetFoo()?.Name`, `lib.Array?[0]` | `?.` checks the value, and the result is maybe-null to the compiler |
+| `lib.GetFoo() ?? fallback`, `lib.GetFoo() ?? throw ...`, `lib.Prop ??= f` | null is replaced or rejected |
+| `lib.GetFoo() is { } foo`, `is Foo foo`, `is not null`, `== null`, `!= null` | null is tested; `is var x` does not count, because `x` can be null |
+| `Use(lib.GetFoo())` where the parameter is `Foo?` | the compiler checks the value inside `Use`; this covers `Console.WriteLine`, `string.IsNullOrEmpty` and other annotated APIs |
+| `return lib.GetFoo();` from a member that returns `Foo?` (also `Task<Foo?>`, `IEnumerable<Foo?>`, lambdas) | the compiler checks the value at every caller |
+| `(Foo?)lib.GetFoo()` | the cast gives the value a maybe-null state |
+| `lib.GetFoo()!` | an explicit decision that the value is not null |
+
+**Not handled:** storing the value in a variable declared nullable. `Foo? x = lib.GetFoo();` is still reported, and so are `out Foo? x`, `foreach (Foo? e in ...)` and `(Foo? a, int n) = ...`. The compiler gives an oblivious value a not-null state, and the variable takes over that state, so `x.Name` on the next line compiles without a warning.
+
+**Handled at every read** (NOA004, NOA005 on a `foreach` variable, NOA006 on a lambda parameter): when the value arrives in a variable that is declared right there (`out var x`, `foreach (var e in ...)`, `var (a, b) = ...`, a lambda parameter), the report goes away when the variable is never assigned again and every read of it handles null as above. A variable that is never read counts as handled, which covers unused event handler parameters. A plain dereference after a check is still a read that does not handle null:
+
+```csharp
+lib.Fill(out var raw);
+if (raw is not { } d) return;        // handled: the only read of raw checks it
+
+lib.Fill(out var d2);
+if (d2 is null) return;
+d2.Name.ToString();                  // still reported: this read does not handle null
+```
+
+Existing variables (`lib.Fill(out existing)`, `ref f`, `(x, y) = ...`) are not followed, because their earlier reads cannot be told apart without flow analysis. Declare a new variable there instead.
+
+**Declared nullable** (NOA006, NOA007): a lambda, override or implementation parameter declared `Foo?` is handled, because the compiler checks every use of a parameter declared nullable.
+
+**Nested positions** (NOA009): declare the position nullable (`Foo?[]`, `List<Foo?>`, `(Foo?, int)`), use `var`, or filter (`lib.Items.OfType<Foo>()` returns only the non-null elements).
+
+### Code fixes
+
+| Report | Fixes |
+|---|---|
+| NOA001, NOA002, NOA003, NOA005 on an element read | *Return early if the value is null* (turns `X x = value;` into `if (value is not X x) return;` in functions that return nothing); *Use ?.* (when the access is a call statement or its result is a reference type); *Throw if the value is null* (`?? throw new InvalidOperationException(...)`); *Assert that the value is not null (!)* |
+| NOA004 on `out var x` or a deconstruction target | renames the variable to `xOrNull` and adds `if (xOrNull is not { } x) throw ...;` (or `return;`) after the statement, so the code that uses `x` stays as it is |
+| NOA005 on a `foreach` variable | renames it and adds `if (eOrNull is not { } e) continue;` at the top of the loop body |
+| NOA006 | declares the lambda parameter nullable, writing out the delegate's parameter types if the lambda had none |
+| NOA007 | declares the parameter or the overriding property type nullable |
+| NOA009 | adds `?` to the positions of the target type that receive oblivious elements, wherever that type is declared |
+
+Every fix supports Fix All (document, project, solution). No fix is offered for NOA004 on an existing variable or a `ref` argument, NOA005 on a spread or a query range variable, NOA006 on a method group, or NOA009 when the target type is not written in source (a `var` local with an explicit type argument, a parameter of a compiled library).
+
+### Suppressing and severity
+
+Suppress what you have reviewed and decided to keep: one place with `#pragma warning disable NOA001` / `#pragma warning restore NOA001`, a member with `[SuppressMessage("Nullability", "NOA001")]`, or a folder with a section in `.editorconfig`.
+
+Set severity per rule in `.editorconfig`:
 
 ```
 [*.cs]
-dotnet_diagnostic.NOA008.severity = warning
+dotnet_diagnostic.NOA002.severity = none
 ```
 
-NOA008 is not reported when the value is awaited, iterated or spread right where it is produced and that step already produces a NOA001 or NOA005 report, because the report would only repeat it.
+`none` turns a rule off; `suggestion`, `warning` and `error` work as for any analyzer. In a project that sets `TreatWarningsAsErrors`, the NOA warnings fail the build; either lower them with `dotnet_diagnostic.NOA00x.severity = suggestion`, or add them to `WarningsNotAsErrors` as the sample project does.
 
-## What it does not do
+### Counting what is left
 
-The analyzer does no flow analysis, on purpose. It looks at declarations: where does an oblivious value come from? It does not look at what the code does with it afterwards. A report stays even when you check for null on the next line:
-
-```csharp
-if (lib.Prop != null)       // NOA002 on this read
-{
-    var x = lib.Prop;       // NOA002 on this one too
-}
-```
-
-The owner wants an audit list, not a second nullable analysis. The compiler's flow analysis already exists and works once a value is typed as nullable.
-
-How to work with that:
-
-1. **Fix.** Receive the value in a variable declared nullable (`GroupPrincipal? group = ...`) and check it before use, or check it right away. The NOA report on that line remains, because the analyzer reports where the value arrives, not how the variable is declared. The compiler's nullable warnings now guard the later uses.
-2. **Suppress or baseline what you have reviewed.** Suppress one place with `#pragma warning disable NOA001` / `#pragma warning restore NOA001`, or on a member with `[SuppressMessage("Nullability", "NOA001")]`. To silence a rule in a folder, give that folder a section in `.editorconfig`. There is no built-in baseline file. A simple baseline is to save the audit output (below) in the repository and compare it in review or CI.
-3. **Set severity per rule** in `.editorconfig`:
-
-   ```
-   [*.cs]
-   dotnet_diagnostic.NOA002.severity = none
-   dotnet_diagnostic.NOA008.severity = warning
-   ```
-
-   `none` turns a rule off; `suggestion`, `warning` and `error` work as for any analyzer. In a project that sets `TreatWarningsAsErrors`, the NOA warnings fail the build; either lower them with `dotnet_diagnostic.NOA00x.severity = suggestion`, or add them to `WarningsNotAsErrors` as the sample project does.
-
-### Using it as an audit list
-
-Raise the rules you want to count to warnings, rebuild, and write the warnings to a file. A file logger writes each warning once:
+A file logger writes each warning once:
 
 ```
 dotnet build --no-incremental -v:q -flp:"logfile=audit.log;warningsonly;verbosity=minimal"
@@ -272,9 +317,9 @@ null_oblivious_analyzer.excluded_assemblies = System.DirectoryServices.*
 
 A value that applies to the file (from `.editorconfig`) wins. The global value is used only for files that have no value of their own.
 
-Exclusion follows the member that is used, never the types in its signature. If `Holder.Items` is declared in an excluded namespace but you call the LINQ method `ToArray()` on it, `ToArray()` is a different member, in `System.Linq`, and its result is still reported (as NOA008) unless that assembly is excluded too.
+Exclusion follows the member that is used, never the types in its signature. If `Holder.Items` is declared in an excluded namespace but you call the LINQ method `ToArray()` on it, `ToArray()` is a different member, in `System.Linq`, and its result is still reported (as NOA009, where it lands in a declared type) unless that assembly is excluded too.
 
-**.NET Framework and netstandard2.0.** Their reference assemblies have no nullable annotations, so the whole base class library is oblivious: even `"x".Trim()` and `list[0]` are reported when you build such a project with nullable enabled. Exclude the framework assemblies there. I verified that this line removes every report for BCL members on both `netstandard2.0` and `net48`:
+**.NET Framework and netstandard2.0.** Their reference assemblies have no nullable annotations, so the whole base class library is oblivious: even `"x".Trim()` and `list[0]` are reported when you build such a project with nullable enabled. Exclude the framework assemblies there. This line removes every report for BCL members on both `netstandard2.0` and `net48`:
 
 ```
 [*.cs]
@@ -287,26 +332,27 @@ null_oblivious_analyzer.excluded_assemblies = netstandard, mscorlib, System.*
 
 Each of these is pinned by a test in `tests/Randactyl.NullObliviousAnalyzer.Tests` unless noted.
 
-- **A type argument inferred from an oblivious argument is not itself oblivious.** `Task.FromResult(lib.GetFoo())` reports the argument (NOA001), but the compiler infers `Task<Foo>` with a non-null `Foo`, so awaiting the task reports nothing. This is a limit of what Roslyn exposes. Test: `PinnedBehaviorTests.Type_argument_inferred_from_an_oblivious_argument_is_not_oblivious`.
-- **An explicitly typed local does not carry obliviousness.** `var inferred = lib.Array; var a = inferred[0];` reports the element (NOA005), but `Foo[] declared = lib.Array; var b = declared[0];` does not, because `declared` is a non-null `Foo[]` as far as the compiler knows. The report on `lib.Array` itself remains. Test: `PinnedBehaviorTests.Var_locals_carry_obliviousness_but_explicitly_typed_locals_do_not`.
-- **No flow analysis.** Null-checked values are still reported. Test: `PinnedBehaviorTests.Null_checked_values_are_still_reported_because_there_is_no_flow_analysis`.
-- **Tuple elements are not reported one by one.** `var (a, n) = lib.GetPair()` gets NOA008 on the call and nothing on `a`, because a tuple is not deconstructed through a method. Test: `DeconstructionTests.Tuples_are_left_to_NOA008_and_annotated_deconstructors_are_not_reported`.
+- **No flow analysis.** A null check handles only the value it checks; a later read of the same member is reported again. Test: `PinnedBehaviorTests.A_null_check_handles_only_the_value_it_checks_because_there_is_no_flow_analysis`.
+- **A type argument inferred from an oblivious argument is not itself oblivious.** `Task.FromResult(lib.GetFoo())` reports the argument (NOA001), but the compiler infers `Task<Foo>` with a non-null `Foo`, so awaiting the task reports nothing. Handle the argument where it arrives. This is a limit of what Roslyn exposes. Test: `PinnedBehaviorTests.Type_argument_inferred_from_an_oblivious_argument_is_not_oblivious`.
+- **Converting to a type without elements hides them.** `object o = list;` (or `IEnumerable`, non-generic) is not reported, and neither is the cast back with `(List<Foo>)o`. There is no position to compare, and the cast is a type you write yourself. Test: `PinnedBehaviorTests.Converting_to_a_type_without_nested_positions_is_not_reported`.
+- **Switch statements and switch expressions do not count as handling null**, even with a `null` arm. Only `is` patterns and `==` / `!=` comparisons do. Test: `PinnedBehaviorTests.Switch_with_a_null_arm_does_not_count_as_handling_null`.
+- **A `params` element does not count as handled**, even when the element type is `object?`: `string.Format("{0}", lib.GetFoo())` is reported. Only an argument bound directly to a `T?` parameter counts. Test: `PinnedBehaviorTests.Params_element_does_not_count_as_handling_null`.
 - **Only values coming in are covered.** Passing a value by value to an oblivious method is not reported. Only `out` and `ref` arguments are. Test: `RefOutArgumentTests.By_value_arguments_are_not_reported`.
 - **Overrides are checked on the incoming side only.** NOA007 looks at parameters and setter values. A read-only property override is not reported. Test: `PropertyOverrideTests.Read_only_and_nullable_overrides_are_not_reported`.
 - **Only nullable-enabled use sites are reported.** A use inside `#nullable disable`, or inside a region with `#nullable enable warnings` (annotations off), is skipped. Tests: `CallResultTests.Use_site_inside_nullable_disable_is_not_reported`, `CallResultTests.Use_site_with_annotations_disabled_is_not_reported`.
 - **Generated code is skipped**, whether it is marked by an `<auto-generated/>` header or by a `.g.cs` file name. Tests: `CallResultTests.Generated_code_is_skipped_by_header`, `CallResultTests.Generated_code_is_skipped_by_file_name`.
-- **Writes are not reads.** `lib.Prop = f`, `lib.Field = f`, `lib[0] = f` and `lib.Array[0] = f` assign and are not reported for the assigned member. Tests: `MemberReadTests.Plain_assignment_is_a_write_but_compound_assignment_is_a_read`, `MemberReadTests.Field_writes_are_not_reads`, `CollectionElementTests.Array_element_write_is_not_a_read`.
+- **Writes are not reads.** `lib.Prop = f`, `lib.Field = f`, `lib[0] = f` and `lib.Array[0] = f` assign and are not reported for the assigned member. Tests: `MemberReadTests.Plain_assignment_is_a_write_and_coalesce_assignment_is_handled`, `MemberReadTests.Field_writes_are_not_reads_and_coalesce_assignment_is_handled`, `CollectionElementTests.Array_element_write_is_not_a_read`.
 - **`nameof` operands are never reported.** Tests: `CallResultTests.Nameof_operand_is_never_reported`, `MemberReadTests.Nameof_operand_is_never_reported`.
 - **Exclusions follow the member used, not the types in its signature.** See Configuration. Tests: `ConfigurationTests.Namespace_exclusion_is_decided_by_the_member_not_the_type_argument`, `ConfigurationTests.Assembly_exclusion_is_decided_by_the_member_not_the_type_argument`.
 - **Exclusions follow a value through an initialized local, and no further.** With the defining assembly or namespace excluded, `var arr = lib.Array; foreach (var e in arr) { }` is silent, and so are `arr[0]`, `[.. items]` and `await task` when the local was initialized from an excluded member. The analyzer follows the initializer through further locals, parentheses, implicit conversions and `await`. It does not follow a local that is assigned again anywhere in the same member, a local with no initializer, a parameter (including a lambda parameter), or any other expression. Those are still reported. Tests: `ConfigurationTests.Excluded_assembly_follows_a_local_into_foreach` and the tests next to it, `ConfigurationTests.Local_that_is_reassigned_is_still_reported`, `ConfigurationTests.Parameter_origin_cannot_be_determined_and_is_still_reported`.
 
 ## How the analyzers are tested
 
-Analyzer tests are ordinary unit tests that compile a small piece of C# source in memory, run the analyzer on it, and compare the diagnostics it produced with the diagnostics the test expects. This repository uses the `Microsoft.CodeAnalysis.CSharp.Analyzer.Testing` package (version 1.1.4) for that.
+Analyzer tests are ordinary unit tests that compile a small piece of C# source in memory, run the analyzer on it, and compare the diagnostics it produced with the diagnostics the test expects. This repository uses the `Microsoft.CodeAnalysis.CSharp.Analyzer.Testing` and `Microsoft.CodeAnalysis.CSharp.CodeFix.Testing` packages (version 1.1.4) for that. The in-memory compilations use Roslyn 5.12 by default; `dotnet test -p:RoslynTestVersion=4.9.2` runs them on the version the analyzer is built against, as CI does.
 
 The expected diagnostics are written into the test source with markup. `{|NOA001:lib.GetFoo()|}` means "the analyzer must report NOA001 on exactly this span of text". The test fails if an expected diagnostic is missing, if an extra one appears, or if a span is off. Source without any markup therefore asserts that the analyzer reports nothing. Markup can be nested, as in `{|NOA001:{|NOA003:lib.Items|}.First()|}`.
 
-This is a real test from the suite (`CallResultTests.cs`):
+For example, from `CallResultTests.cs`:
 
 ```csharp
 [Test]
@@ -329,13 +375,15 @@ public Task Method_from_oblivious_assembly()
 
 The analyzer needs a value that is oblivious, which means code compiled without nullable annotations. `tests/Randactyl.NullObliviousAnalyzer.Testing/AnalyzerVerifier.cs` provides that. `VerifyAsync(source, Libs.Oblivious)` builds two projects in memory. The main project holds the test source and has nullable enabled. A second project, named `ObliviousLib`, holds the library source from `Libs.cs` (the `Lib`, `Foo` and `Box<T>` types used in the examples) and has nullable disabled, so every reference type it exposes is oblivious. The main project references the second. Tests that need the real world instead pass a NuGet package: `DirectoryServicesIntegrationTests` adds `System.DirectoryServices.AccountManagement` 11.0.0. Options on the helper set an `.editorconfig` or `.globalconfig` and the file name (to test generated-code detection). The helper uses a plain `DefaultVerifier`, which throws ordinary exceptions, so it works with any test runner.
 
+Code fix tests (`CodeFixTests.cs`) use `CodeFixVerifier<TCodeFix>.VerifyAsync(source, fixedSource, equivalenceKey, Libs.Oblivious)` from the same project. It applies the fix chosen by its equivalence key to every diagnostic it is offered for, one at a time and through Fix All, and compares the result with `fixedSource`. Markup in `fixedSource` lists the reports that remain.
+
 Run the tests from the repository root:
 
 ```
 dotnet test
 ```
 
-Expect 124 passing tests. `dotnet test` in the root finds the solution file and runs the one test project. `global.json` makes it use the Microsoft.Testing.Platform runner, which TUnit is built on.
+`dotnet test` in the root finds the solution file and runs the one test project. `global.json` makes it use the Microsoft.Testing.Platform runner, which TUnit is built on.
 
 Two things to know when the tests run:
 
@@ -345,10 +393,11 @@ Two things to know when the tests run:
 ## Repository layout and build commands
 
 ```
-src/Randactyl.NullObliviousAnalyzer/             the analyzer (netstandard2.0), rules NOA001-NOA008
-tests/Randactyl.NullObliviousAnalyzer.Testing/   AnalyzerVerifier, the shared test helper
-tests/Randactyl.NullObliviousAnalyzer.Tests/     124 tests (TUnit)
-samples/DirectoryServicesSample/                 uses the analyzer through a project reference
+src/Randactyl.NullObliviousAnalyzer/             the analyzer (netstandard2.0), rules NOA001-NOA007 and NOA009
+src/Randactyl.NullObliviousAnalyzer.CodeFixes/   the code fixes (netstandard2.0), packed next to the analyzer
+tests/Randactyl.NullObliviousAnalyzer.Testing/   AnalyzerVerifier and CodeFixVerifier, the shared test helpers
+tests/Randactyl.NullObliviousAnalyzer.Tests/     the tests (TUnit)
+samples/DirectoryServicesSample/                 uses the analyzer and code fixes through project references
 Randactyl.NullObliviousAnalyzer.slnx             the solution
 eng/smoke-test.sh                                installs the packed analyzer into a throwaway project
 .github/workflows/                               CI on every push, release on a v* tag
@@ -360,11 +409,11 @@ global.json                                      selects the Microsoft.Testing.P
 ```
 dotnet build Randactyl.NullObliviousAnalyzer.slnx                         # whole solution
 dotnet build samples/DirectoryServicesSample --no-incremental             # see the NOA warnings
-dotnet test                                                              # 124 tests
+dotnet test                                                              # run the tests
 dotnet pack src/Randactyl.NullObliviousAnalyzer -c Release -o artifacts/pkg   # the NuGet package
-eng/smoke-test.sh artifacts/pkg 0.1.0 11                                  # check the package in a clean project on SDK 11
+eng/smoke-test.sh artifacts/pkg 0.2.0 11                                  # check the package in a clean project on SDK 11
 ```
 
-To release, push a tag such as `v0.1.0` that matches `<Version>` in the analyzer's `.csproj`. The release workflow runs CI, creates the GitHub release with the package attached and release notes generated from the commit messages, and pushes the package to GitHub Packages. Publishing to nuget.org is a separate step.
+To release, push a tag such as `v0.2.0` that matches `<Version>` in the analyzer's `.csproj`. The release workflow runs CI, creates the GitHub release with the package attached and release notes generated from the commit messages, and pushes the package to GitHub Packages. Publishing to nuget.org is a separate step.
 
-`Directory.Build.props` sets `TreatWarningsAsErrors` for every project. The sample project lists NOA001 to NOA007 in `WarningsNotAsErrors` so that its purpose, showing the warnings, does not fail the build.
+`Directory.Build.props` sets `TreatWarningsAsErrors` for every project. The sample project lists its NOA rules in `WarningsNotAsErrors` so that its purpose, showing the warnings, does not fail the build.

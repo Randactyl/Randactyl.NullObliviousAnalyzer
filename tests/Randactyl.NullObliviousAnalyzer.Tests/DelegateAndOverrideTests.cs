@@ -14,9 +14,9 @@ public class DelegateAndOverrideTests
             {
                 void M(Lib lib)
                 {
-                    Handler h = ({|NOA006:s|}, {|NOA006:e|}) => { };
-                    lib.Changed += ({|NOA006:s|}, {|NOA006:e|}) => { };
-                    lib.Each({|NOA006:f|} => { });
+                    Handler h = ({|NOA006:s|}, {|NOA006:e|}) => { s.ToString(); e.ToString(); };
+                    lib.Changed += ({|NOA006:s|}, {|NOA006:e|}) => { s.ToString(); e.ToString(); };
+                    lib.Each({|NOA006:f|} => f.ToString());
                 }
             }
             """;
@@ -27,7 +27,7 @@ public class DelegateAndOverrideTests
     public Task Anonymous_method_parameters()
     {
         const string source = """
-            class C { void M() { FooAction a = delegate ({|NOA006:Foo f|}) { }; } }
+            class C { void M() { FooAction a = delegate ({|NOA006:Foo f|}) { f.ToString(); }; } }
             """;
         return AnalyzerVerifier.VerifyAsync(source, Libs.Oblivious);
     }
@@ -39,7 +39,7 @@ public class DelegateAndOverrideTests
             #nullable disable
             public delegate void Callback(string text);
             #nullable enable
-            class C { void M() { Callback c = {|NOA006:t|} => { }; } }
+            class C { void M() { Callback c = {|NOA006:t|} => t.ToString(); } }
             """;
         return AnalyzerVerifier.VerifyAsync(source);
     }

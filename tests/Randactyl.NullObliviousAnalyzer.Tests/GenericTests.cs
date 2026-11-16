@@ -40,6 +40,7 @@ public class GenericTests
                     var c = {|NOA002:box[0]|};
                     var d = {|NOA001:box.Get()|};
                     box.TryGet({|NOA004:out var v|});
+                    v.ToString();
                     box.Value = new Foo();
                 }
             }
@@ -51,7 +52,7 @@ public class GenericTests
     public Task Generic_out_argument_with_annotated_type_argument()
     {
         const string source = """
-            class C { void M(Lib lib) { lib.TryResolve<Foo>({|NOA004:out var f|}); } }
+            class C { void M(Lib lib) { lib.TryResolve<Foo>({|NOA004:out var f|}); f.ToString(); } }
             """;
         return AnalyzerVerifier.VerifyAsync(source, Libs.Oblivious);
     }
@@ -139,17 +140,17 @@ public class GenericTests
     }
 
     [Test]
-    public Task Substituted_type_argument_nested_in_a_value_type_is_NOA008()
+    public Task Explicit_non_null_type_argument_for_an_oblivious_type_parameter_is_NOA009()
     {
         const string source = """
             class C
             {
                 void M(Lib lib)
                 {
-                    var a = {|NOA008:lib.ResolvePair<Foo>()|};
+                    var a = {|NOA009:lib.ResolvePair<Foo>()|};
                     var b = lib.ResolvePair<int>();
                     var c = lib.ResolvePair<Foo?>();
-                    var d = {|NOA008:lib.ResolveValueAsync<Foo>()|};
+                    var d = {|NOA009:lib.ResolveValueAsync<Foo>()|};
                 }
             }
             """;
@@ -165,8 +166,8 @@ public class GenericTests
                 void M(Lib lib)
                 {
                     var a = {|NOA005:{|NOA001:lib.ResolveArray<Foo>()|}[0]|};
-                    foreach (var {|NOA005:x|} in {|NOA001:lib.ResolveArray<Foo>()|}) { }
-                    foreach (var {|NOA005:y|} in {|NOA001:lib.Stream<Foo>()|}) { }
+                    foreach (var {|NOA005:x|} in {|NOA001:lib.ResolveArray<Foo>()|}) { x.ToString(); }
+                    foreach (var {|NOA005:y|} in {|NOA001:lib.Stream<Foo>()|}) { y.ToString(); }
                     foreach (var z in {|NOA001:lib.Stream<int>()|}) { }
                     foreach (var w in {|NOA001:lib.Stream<Foo?>()|}) { }
                 }
@@ -184,8 +185,8 @@ public class GenericTests
                 void OnFoo(Foo f) { }
                 void M(Lib lib)
                 {
-                    lib.Listen<Foo>({|NOA006:f|} => { });
-                    Handler<Foo> h = {|NOA006:f|} => { };
+                    lib.Listen<Foo>({|NOA006:f|} => f.ToString());
+                    Handler<Foo> h = {|NOA006:f|} => f.ToString();
                     lib.Listen<Foo>({|NOA006:OnFoo|});
                     Handler<Foo?> n = f => { };
                     Handler<int> i = x => { };

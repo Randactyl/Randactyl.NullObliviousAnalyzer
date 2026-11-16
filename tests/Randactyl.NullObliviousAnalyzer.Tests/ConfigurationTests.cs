@@ -113,7 +113,7 @@ public class ConfigurationTests
         // Items is in Vendor (excluded); ToArray is in System.Collections.Generic and merely returns an oblivious Other.Else[].
         const string source = """
             using System.Linq;
-            class C { void M(Vendor.Holder h) { var a = {|NOA008:h.Items.ToArray()|}; } }
+            class C { void M(Vendor.Holder h) { Other.Else[] a = {|NOA009:h.Items.ToArray()|}; } }
             """;
         return AnalyzerVerifier.VerifyAsync(
             source,
@@ -327,7 +327,7 @@ public class ConfigurationTests
                 {
                     var arr = lib.Array;
                     arr = lib.Array;
-                    foreach (var {|NOA005:e|} in arr) { }
+                    foreach (var {|NOA005:e|} in arr) { e.ToString(); }
                     var x = {|NOA005:arr[0]|};
                 }
             }
@@ -343,7 +343,7 @@ public class ConfigurationTests
     public Task Parameter_origin_cannot_be_determined_and_is_still_reported()
     {
         const string source = """
-            class C { void M(Registry registry) { registry.On(arr => { foreach (var {|NOA005:e|} in arr) { } }); } }
+            class C { void M(Registry registry) { registry.On(arr => { foreach (var {|NOA005:e|} in arr) { e.ToString(); } }); } }
             """;
         return AnalyzerVerifier.VerifyAsync(
             source,

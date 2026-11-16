@@ -7,14 +7,14 @@ namespace Randactyl.NullObliviousAnalyzer.Tests;
 public class PinnedBehaviorTests
 {
     [Test]
-    public Task Null_checked_values_are_still_reported_because_there_is_no_flow_analysis()
+    public Task A_null_check_handles_only_the_value_it_checks_because_there_is_no_flow_analysis()
     {
         const string source = """
             class C
             {
                 void M(Lib lib)
                 {
-                    if ({|NOA002:lib.Prop|} != null)
+                    if (lib.Prop != null)
                     {
                         var x = {|NOA002:lib.Prop|};
                     }
@@ -25,7 +25,7 @@ public class PinnedBehaviorTests
     }
 
     [Test]
-    public Task Var_locals_carry_obliviousness_but_explicitly_typed_locals_do_not()
+    public Task Var_locals_carry_obliviousness_and_explicitly_typed_locals_are_reported_where_assigned()
     {
         const string source = """
             class C
@@ -34,7 +34,7 @@ public class PinnedBehaviorTests
                 {
                     var inferred = {|NOA003:lib.Array|};
                     var a = {|NOA005:inferred[0]|};
-                    Foo[] declared = {|NOA003:lib.Array|};
+                    Foo[] declared = {|NOA009:{|NOA003:lib.Array|}|};
                     var b = declared[0];
                 }
             }
@@ -72,6 +72,69 @@ public class PinnedBehaviorTests
                 {
                     var task = {|NOA001:lib.GetFooAsync()|};
                     var foo = {|NOA001:await task|};
+                }
+            }
+            """;
+        return AnalyzerVerifier.VerifyAsync(source, Libs.Oblivious);
+    }
+
+    [Test]
+    public Task Converting_to_a_type_without_nested_positions_is_not_reported()
+    {
+        // object has no element type to compare, and the cast back is a type the developer declares.
+        const string source = """
+            using System.Collections.Generic;
+            using System.Linq;
+            class C
+            {
+                void M(Lib lib)
+                {
+                    var list = {|NOA003:lib.Items|}.ToList();
+                    object boxed = list;
+                    var back = (List<Foo>)boxed;
+                    back[0].ToString();
+                }
+            }
+            """;
+        return AnalyzerVerifier.VerifyAsync(source, Libs.Oblivious);
+    }
+
+    [Test]
+    public Task Switch_with_a_null_arm_does_not_count_as_handling_null()
+    {
+        const string source = """
+            class C
+            {
+                void M(Lib lib)
+                {
+                    switch ({|NOA001:lib.GetFoo()|})
+                    {
+                        case null:
+                            break;
+                        default:
+                            break;
+                    }
+                    var n = {|NOA001:lib.GetFoo()|} switch
+                    {
+                        null => 0,
+                        _ => 1,
+                    };
+                }
+            }
+            """;
+        return AnalyzerVerifier.VerifyAsync(source, Libs.Oblivious);
+    }
+
+    [Test]
+    public Task Params_element_does_not_count_as_handling_null()
+    {
+        // Only a by-value argument bound directly to a T? parameter counts; a params element is not checked.
+        const string source = """
+            class C
+            {
+                void M(Lib lib)
+                {
+                    var s = string.Format("{0}{1}{2}{3}", 1, 2, 3, {|NOA001:lib.GetFoo()|});
                 }
             }
             """;

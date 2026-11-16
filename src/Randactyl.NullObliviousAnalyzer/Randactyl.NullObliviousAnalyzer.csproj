@@ -11,9 +11,9 @@
   </PropertyGroup>
   <PropertyGroup Label="Package">
     <PackageId>Randactyl.NullObliviousAnalyzer</PackageId>
-    <Version>0.1.0</Version>
+    <Version>0.2.0</Version>
     <Authors>Randactyl</Authors>
-    <Description>Roslyn analyzers that list every place a null-oblivious reference value (from code compiled without nullable annotations) enters nullable-enabled code. They do no flow analysis on purpose: the reports are an audit list, not a second nullable analysis. Rules NOA001 to NOA008.</Description>
+    <Description>Roslyn analyzers and code fixes that report every place a null-oblivious reference value (from code compiled without nullable annotations) enters nullable-enabled code. A report goes away once the code handles null where the value arrives, or hands it to the compiler's nullable analysis. Rules NOA001 to NOA007 and NOA009.</Description>
     <PackageTags>analyzer;roslyn;nullable;nullability;null-oblivious</PackageTags>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
@@ -23,7 +23,9 @@
     <Copyright>Copyright (c) 2026 Randactyl</Copyright>
     <PackageReleaseNotes>https://github.com/Randactyl/Randactyl.NullObliviousAnalyzer/releases/tag/v$(Version)</PackageReleaseNotes>
     <!-- Normalizes paths in the PDB and embedded metadata for builds on GitHub Actions. -->
-    <ContinuousIntegrationBuild Condition="'$(GITHUB_ACTIONS)' == 'true'">true</ContinuousIntegrationBuild>
+    <ContinuousIntegrationBuild Condition="'$(GITHUB_ACTIONS)' == 'true'"
+      >true</ContinuousIntegrationBuild
+    >
     <!-- An analyzer package ships only the analyzer: no lib/ folder, no dependencies for consumers. -->
     <IncludeBuildOutput>false</IncludeBuildOutput>
     <SuppressDependenciesWhenPacking>true</SuppressDependenciesWhenPacking>
@@ -39,6 +41,33 @@
     <AdditionalFiles Include="AnalyzerReleases.Shipped.md" />
     <AdditionalFiles Include="AnalyzerReleases.Unshipped.md" />
   </ItemGroup>
+  <PropertyGroup>
+    <CodeFixesProject>..\Randactyl.NullObliviousAnalyzer.CodeFixes\Randactyl.NullObliviousAnalyzer.CodeFixes.csproj</CodeFixesProject>
+  </PropertyGroup>
+  <!-- A copy of this folder alone still builds; the code fixes are packed only when their project is next to it. -->
+  <ItemGroup Condition="Exists('$(CodeFixesProject)')">
+    <!-- Built first so its DLL can be packed; the analyzer itself does not reference Workspaces. -->
+    <ProjectReference
+      Include="$(CodeFixesProject)"
+      ReferenceOutputAssembly="false"
+      PrivateAssets="all"
+    />
+  </ItemGroup>
+  <PropertyGroup Condition="Exists('$(CodeFixesProject)')">
+    <TargetsForTfmSpecificContentInPackage>$(TargetsForTfmSpecificContentInPackage);AddCodeFixesToPackage</TargetsForTfmSpecificContentInPackage>
+  </PropertyGroup>
+  <Target Name="AddCodeFixesToPackage">
+    <MSBuild
+      Projects="$(CodeFixesProject)"
+      Targets="GetTargetPath"
+      Properties="Configuration=$(Configuration)"
+    >
+      <Output TaskParameter="TargetOutputs" ItemName="CodeFixesAssembly" />
+    </MSBuild>
+    <ItemGroup>
+      <TfmSpecificPackageFile Include="@(CodeFixesAssembly)" PackagePath="analyzers/dotnet/cs" />
+    </ItemGroup>
+  </Target>
   <ItemGroup Label="Package contents">
     <None Include="$(TargetPath)" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />
     <None

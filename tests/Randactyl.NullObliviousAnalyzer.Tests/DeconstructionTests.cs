@@ -16,6 +16,7 @@ public class DeconstructionTests
                 {
                     var ({|NOA004:a|}, {|NOA004:b|}) = {|NOA001:lib.GetThing()|};
                     var ({|NOA004:c|}, n) = {|NOA001:lib.GetTriple()|};
+                    a.ToString(); b.ToString(); c.ToString();
                 }
             }
             """;
@@ -25,6 +26,7 @@ public class DeconstructionTests
     [Test]
     public Task Deconstruction_into_existing_and_explicitly_typed_targets()
     {
+        // A nullable target does not help: the compiler gives the oblivious value a not-null state.
         const string source = """
             class C
             {
@@ -34,10 +36,11 @@ public class DeconstructionTests
                 {
                     Foo x = new Foo();
                     Foo? maybe = null;
-                    ({|NOA004:x|}, maybe) = {|NOA001:lib.GetThing()|};
+                    ({|NOA004:x|}, {|NOA004:maybe|}) = {|NOA001:lib.GetThing()|};
                     ({|NOA004:field|}, _) = {|NOA001:lib.GetThing()|};
-                    (Foo {|NOA004:a|}, Foo? b) = {|NOA001:lib.GetThing()|};
+                    (Foo {|NOA004:a|}, Foo? {|NOA004:b|}) = {|NOA001:lib.GetThing()|};
                     (Foo {|NOA004:c|}, var {|NOA004:d|}) = {|NOA001:lib.GetThing()|};
+                    a.ToString(); b.ToString(); c.ToString(); d.ToString();
                 }
             }
             """;
@@ -48,7 +51,7 @@ public class DeconstructionTests
     public Task Discards_are_not_reported()
     {
         const string source = """
-            class C { void M(Lib lib) { var (_, {|NOA004:b|}) = {|NOA001:lib.GetThing()|}; var (_, _) = {|NOA001:lib.GetThing()|}; } }
+            class C { void M(Lib lib) { var (_, {|NOA004:b|}) = {|NOA001:lib.GetThing()|}; b.ToString(); var (_, _) = {|NOA001:lib.GetThing()|}; } }
             """;
         return AnalyzerVerifier.VerifyAsync(source, Libs.Oblivious);
     }
@@ -61,8 +64,8 @@ public class DeconstructionTests
             {
                 void M(Lib lib)
                 {
-                    foreach ({|NOA005:var ({|NOA004:a|}, {|NOA004:b|})|} in {|NOA003:lib.Things|}) { }
-                    foreach ({|NOA005:var ({|NOA004:c|}, n)|} in {|NOA003:lib.Triples|}) { }
+                    foreach ({|NOA005:var ({|NOA004:a|}, {|NOA004:b|})|} in {|NOA003:lib.Things|}) { a.ToString(); b.ToString(); }
+                    foreach ({|NOA005:var ({|NOA004:c|}, n)|} in {|NOA003:lib.Triples|}) { c.ToString(); }
                 }
             }
             """;
@@ -70,7 +73,7 @@ public class DeconstructionTests
     }
 
     [Test]
-    public Task Tuples_are_left_to_NOA008_and_annotated_deconstructors_are_not_reported()
+    public Task Unread_tuple_targets_and_annotated_deconstructors_are_not_reported()
     {
         const string source = """
             class Pair { public void Deconstruct(out string a, out string b) { a = ""; b = ""; } }
@@ -78,7 +81,7 @@ public class DeconstructionTests
             {
                 void M(Lib lib, Pair pair)
                 {
-                    var (a, n) = {|NOA008:lib.GetPair()|};
+                    var (a, n) = lib.GetPair();
                     var (b, c) = pair;
                     var (d, e) = (1, 2);
                 }
@@ -96,6 +99,7 @@ public class DeconstructionTests
                 void M(Lib lib)
                 {
                     var (n, ({|NOA004:a|}, {|NOA004:b|})) = (1, {|NOA001:lib.GetThing()|});
+                    a.ToString(); b.ToString();
                 }
             }
             """;

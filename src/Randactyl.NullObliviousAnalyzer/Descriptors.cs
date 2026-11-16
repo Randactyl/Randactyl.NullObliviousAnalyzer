@@ -7,7 +7,8 @@ internal static class Descriptors
     private const string Category = "Nullability";
 
     // Each rule has a heading in README.md; the help link points at its GitHub anchor.
-    private const string HelpLinkBase = "https://github.com/Randactyl/Randactyl.NullObliviousAnalyzer#";
+    private const string HelpLinkBase =
+        "https://github.com/Randactyl/Randactyl.NullObliviousAnalyzer#";
 
     public static readonly DiagnosticDescriptor CallResult = Create(
         "NOA001",
@@ -33,8 +34,8 @@ internal static class Descriptors
     public static readonly DiagnosticDescriptor RefOrOutArgument = Create(
         "NOA004",
         "noa004-out-ref-and-deconstruction",
-        "out/ref argument may receive a null-oblivious reference type",
-        "The callee may assign a null-oblivious value of type '{1}' through parameter '{0}'"
+        "out/ref argument or deconstruction target receives a null-oblivious reference type",
+        "'{0}' may receive a null-oblivious value of type '{1}'"
     );
 
     public static readonly DiagnosticDescriptor CollectionElement = Create(
@@ -58,12 +59,11 @@ internal static class Descriptors
         "'{0}' overrides or implements '{2}', whose incoming parameter or setter value has the null-oblivious type '{1}'"
     );
 
-    public static readonly DiagnosticDescriptor NestedOblivious = Create(
-        "NOA008",
-        "noa008-nested-oblivious-type",
-        "Null-oblivious reference type nested in a type argument, array element or tuple element",
-        "'{0}' has type '{1}' which contains a null-oblivious reference type",
-        DiagnosticSeverity.Info
+    public static readonly DiagnosticDescriptor NestedObliviousLost = Create(
+        "NOA009",
+        "noa009-nested-oblivious-type-declared-non-null",
+        "Null-oblivious type argument, array element or tuple element is declared non-null",
+        "'{0}' has null-oblivious elements or type arguments of type '{1}', and '{2}' declares them non-null"
     );
 
     private static DiagnosticDescriptor Create(

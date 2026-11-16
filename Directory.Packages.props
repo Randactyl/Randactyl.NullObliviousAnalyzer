@@ -3,12 +3,17 @@
     <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
   </PropertyGroup>
   <ItemGroup>
-    <!-- 4.14 is the oldest Roslyn that has every API we use plus current IDE hosts can load it; the SDK 11.0.100 compiler (5.x) is newer, so the analyzer loads. -->
-    <PackageVersion Include="Microsoft.CodeAnalysis.CSharp" Version="4.14.0" />
-    <PackageVersion Include="Microsoft.CodeAnalysis.CSharp.Workspaces" Version="4.14.0" />
+    <!--
+      The analyzer and code fixes compile against the oldest Roslyn that has every API they use: 4.9 added the
+      collection expression operations (ISpreadOperation, ICollectionExpressionOperation). Any host with Roslyn 4.9
+      or later loads them (SDK 8.0.200+, Visual Studio 2022 17.9+). The tests override this with RoslynTestVersion.
+    -->
+    <PackageVersion Include="Microsoft.CodeAnalysis.CSharp" Version="4.9.2" />
+    <PackageVersion Include="Microsoft.CodeAnalysis.CSharp.Workspaces" Version="4.9.2" />
     <PackageVersion Include="System.Security.Cryptography.Pkcs" Version="11.0.0" />
     <PackageVersion Include="Microsoft.CodeAnalysis.Analyzers" Version="3.11.0" />
     <PackageVersion Include="Microsoft.CodeAnalysis.CSharp.Analyzer.Testing" Version="1.1.4" />
+    <PackageVersion Include="Microsoft.CodeAnalysis.CSharp.CodeFix.Testing" Version="1.1.4" />
     <PackageVersion Include="TUnit" Version="1.84.0" />
     <PackageVersion Include="System.DirectoryServices.AccountManagement" Version="11.0.0" />
   </ItemGroup>

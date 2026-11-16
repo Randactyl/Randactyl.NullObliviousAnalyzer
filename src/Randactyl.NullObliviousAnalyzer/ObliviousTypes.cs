@@ -3,17 +3,6 @@ using Microsoft.CodeAnalysis;
 
 namespace Randactyl.NullObliviousAnalyzer;
 
-internal enum Obliviousness
-{
-    None,
-
-    /// <summary>The type itself is oblivious.</summary>
-    Oblivious,
-
-    /// <summary>The type is not oblivious but a type argument, array element or tuple element is.</summary>
-    Nested,
-}
-
 /// <summary>The one place that decides what "null-oblivious" means.</summary>
 internal static class ObliviousTypes
 {
@@ -29,15 +18,6 @@ internal static class ObliviousTypes
             || type is ITypeParameterSymbol { IsValueType: false }
         )
         && annotation == NullableAnnotation.None;
-
-    public static Obliviousness Classify(ITypeSymbol? type, NullableAnnotation annotation)
-    {
-        if (type is null)
-            return Obliviousness.None;
-        if (IsOblivious(type, annotation))
-            return Obliviousness.Oblivious;
-        return ContainsOblivious(type) ? Obliviousness.Nested : Obliviousness.None;
-    }
 
     public static bool ContainsOblivious(ITypeSymbol type)
     {
@@ -56,7 +36,9 @@ internal static class ObliviousTypes
                         IsOblivious(argument, named.TypeArgumentNullableAnnotations[i])
                         || ContainsOblivious(argument)
                     )
+                    {
                         return true;
+                    }
                 }
 
                 return false;
@@ -143,9 +125,15 @@ internal static class ObliviousTypes
     )
     {
         if (type is null || originalType is null)
+        {
             return (type, annotation);
+        }
+
         if (IsSubstitutedOblivious(type, annotation, originalType, originalAnnotation))
+        {
             return (type, NullableAnnotation.None);
+        }
+
         return (Rebuild(compilation, type, originalType), annotation);
     }
 
@@ -232,20 +220,31 @@ internal static class ObliviousTypes
                 }
 
                 if (!changed)
+                {
                     return named;
+                }
+
                 if (!named.IsTupleType)
+                {
                     return named.ConstructedFrom.Construct(
                         arguments.ToImmutable(),
                         annotations.ToImmutable()
                     );
+                }
+
                 if (named.TupleElements.Length != arguments.Count)
+                {
                     return named;
+                }
 
                 var names = ImmutableArray.CreateBuilder<string?>(arguments.Count);
                 foreach (var tupleElement in named.TupleElements)
+                {
                     names.Add(
                         tupleElement.IsExplicitlyNamedTupleElement ? tupleElement.Name : null
                     );
+                }
+
                 return compilation.CreateTupleTypeSymbol(
                     arguments.ToImmutable(),
                     names.ToImmutable(),

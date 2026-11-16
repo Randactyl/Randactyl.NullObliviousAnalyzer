@@ -14,9 +14,14 @@ internal static class OperationHelpers
     {
         var parent = operation.Parent;
         if (parent is IArgumentOperation { Parameter.RefKind: RefKind.Out })
+        {
             return true;
+        }
+
         if (parent is ISimpleAssignmentOperation simple && simple.Target == operation)
+        {
             return true;
+        }
 
         // (a.X, b.Y) = pair
         while (parent is ITupleOperation)
@@ -32,10 +37,359 @@ internal static class OperationHelpers
     public static bool IsInsideNameof(IOperation operation)
     {
         for (var current = operation.Parent; current is not null; current = current.Parent)
+        {
             if (current is INameOfOperation)
+            {
                 return true;
+            }
+        }
+
         return false;
     }
+
+    /// <summary>
+    /// True when the code that consumes the value deals with null, or hands the value to a declaration that the
+    /// compiler's nullable analysis treats as maybe-null. Storing it in a nullable variable is not enough: the
+    /// compiler gives an oblivious value a not-null state and the variable takes that state over.
+    /// </summary>
+    public static bool IsNullHandled(IOperation operation)
+    {
+        if (IsNullForgiven(operation.Syntax))
+        {
+            return true;
+        }
+
+        var current = operation;
+        while (true)
+        {
+            var parent = current.Parent;
+            switch (parent)
+            {
+                case IParenthesizedOperation:
+                case IConversionOperation { IsImplicit: true, Conversion.IsUserDefined: false }:
+                    current = parent;
+                    continue;
+                case IConversionOperation { IsImplicit: false } conversion:
+                    return conversion.Syntax is CastExpressionSyntax { Type: NullableTypeSyntax };
+                // The receiver is checked, and the value a conditional access produces is maybe-null.
+                case IConditionalAccessOperation:
+                    return true;
+                case ICoalesceOperation coalesce:
+                    return coalesce.Value == current;
+                case ICoalesceAssignmentOperation coalesce:
+                    return coalesce.Target == current;
+                // `is var x` matches null and gives x the value's not-null state.
+                case IIsPatternOperation pattern:
+                    return pattern.Pattern
+                        is not IDeclarationPatternOperation { MatchesNull: true };
+                case IBinaryOperation
+                {
+                    OperatorKind: BinaryOperatorKind.Equals or BinaryOperatorKind.NotEquals
+                } comparison:
+                    return IsNullLiteral(
+                        comparison.LeftOperand == current
+                            ? comparison.RightOperand
+                            : comparison.LeftOperand
+                    );
+                case IArgumentOperation argument:
+                    return argument.Parameter
+                        is {
+                            RefKind: RefKind.None,
+                            NullableAnnotation: NullableAnnotation.Annotated
+                        };
+                case IReturnOperation @return:
+                    return ReturnTarget(@return).Annotation == NullableAnnotation.Annotated;
+                default:
+                    return false;
+            }
+        }
+    }
+
+    public static bool IsNullForgiven(SyntaxNode syntax)
+    {
+        var parent = syntax.Parent;
+        while (parent is ParenthesizedExpressionSyntax)
+        {
+            parent = parent.Parent;
+        }
+
+        return parent is PostfixUnaryExpressionSyntax postfix
+            && postfix.IsKind(SyntaxKind.SuppressNullableWarningExpression);
+    }
+
+    private static bool IsNullLiteral(IOperation operation) =>
+        Unwrap(operation).ConstantValue is { HasValue: true, Value: null };
+
+    /// <summary>The declared type of the value a return or yield return produces for the caller, and its syntax.</summary>
+    private static (
+        ITypeSymbol? Type,
+        NullableAnnotation Annotation,
+        TypeSyntax? Syntax
+    ) ReturnTarget(IReturnOperation @return)
+    {
+        IMethodSymbol? method = null;
+        for (var current = @return.Parent; current is not null; current = current.Parent)
+        {
+            if (current is IAnonymousFunctionOperation function)
+            {
+                method = function.Symbol;
+                break;
+            }
+
+            if (current is ILocalFunctionOperation local)
+            {
+                method = local.Symbol;
+                break;
+            }
+        }
+
+        method ??=
+            @return.SemanticModel?.GetEnclosingSymbol(@return.Syntax.SpanStart) as IMethodSymbol;
+        if (method is null)
+        {
+            return default;
+        }
+
+        var syntax =
+            method.DeclaringSyntaxReferences.Length == 1
+                ? method.DeclaringSyntaxReferences[0].GetSyntax() switch
+                {
+                    MethodDeclarationSyntax declaration => declaration.ReturnType,
+                    LocalFunctionStatementSyntax declaration => declaration.ReturnType,
+                    ParenthesizedLambdaExpressionSyntax lambda => lambda.ReturnType,
+                    // A getter's syntax is the accessor or the expression body; its type is on the property.
+                    AccessorDeclarationSyntax
+                    {
+                        Parent.Parent: BasePropertyDeclarationSyntax property
+                    } => property.Type,
+                    ArrowExpressionClauseSyntax
+                    {
+                        Parent: BasePropertyDeclarationSyntax property
+                    } => property.Type,
+                    _ => null,
+                }
+                : null;
+
+        // yield return produces the element; return in an async method produces the task's result.
+        if (
+            (@return.Kind == OperationKind.YieldReturn || method.IsAsync)
+            && method.ReturnType is INamedTypeSymbol { TypeArguments.Length: 1 } wrapper
+        )
+        {
+            return (
+                wrapper.TypeArguments[0],
+                wrapper.TypeArgumentNullableAnnotations[0],
+                SingleTypeArgument(syntax)
+            );
+        }
+
+        return (method.ReturnType, method.ReturnNullableAnnotation, syntax);
+    }
+
+    /// <summary>
+    /// The declared type that receives the value of an expression: the variable, parameter, return type, cast,
+    /// pattern or element type it is converted to, with the syntax that declares it when there is one in source.
+    /// Walks through parentheses, conditional and coalesce operands, switch-expression arms and conditional access.
+    /// Null when the value is not converted to a declared type (a member receiver, a foreach collection, a
+    /// deconstruction); elements of a foreach collection are reported when they arrive in the iteration variable.
+    /// </summary>
+    public static (ITypeSymbol Type, TypeSyntax? Syntax)? NestedTarget(
+        Compilation compilation,
+        IOperation operation
+    )
+    {
+        var current = operation;
+        while (true)
+        {
+            var parent = current.Parent;
+            switch (parent)
+            {
+                case IParenthesizedOperation:
+                case IConversionOperation
+                {
+                    IsImplicit: true,
+                    Conversion: { IsUserDefined: false, IsIdentity: true }
+                }:
+                case IConditionalAccessOperation access when access.WhenNotNull == current:
+                case IConditionalOperation conditional when conditional.Condition != current:
+                case ICoalesceOperation:
+                case ISwitchExpressionOperation:
+                case ISwitchExpressionArmOperation arm when arm.Value == current:
+                    current = parent;
+                    continue;
+                // The conversion decides the type; the declaration it serves, if any, supplies the syntax.
+                case IConversionOperation
+                {
+                    IsImplicit: true,
+                    Conversion.IsUserDefined: false,
+                    Type: { } converted
+                } conversion:
+                    var served = NestedTarget(compilation, conversion);
+                    return (
+                        converted,
+                        served is var (servedType, servedSyntax)
+                        && SymbolEqualityComparer.IncludeNullability.Equals(servedType, converted)
+                            ? servedSyntax
+                            : null
+                    );
+                case IConversionOperation { IsImplicit: false } conversion:
+                    if (conversion.Syntax is CastExpressionSyntax cast)
+                    {
+                        return conversion.SemanticModel?.GetTypeInfo(cast.Type).Type is { } castType
+                            ? (castType, cast.Type)
+                            : null;
+                    }
+
+                    return conversion.Type is { } asType ? (asType, null) : null;
+                case IVariableInitializerOperation
+                {
+                    Parent: IVariableDeclaratorOperation declarator
+                }:
+                    return FromSymbol(declarator.Symbol);
+                case IFieldInitializerOperation field:
+                    return FromSymbol(field.InitializedFields.FirstOrDefault());
+                case IPropertyInitializerOperation property:
+                    return FromSymbol(property.InitializedProperties.FirstOrDefault());
+                case ISimpleAssignmentOperation assignment when assignment.Value == current:
+                    var symbol = assignment.Target switch
+                    {
+                        ILocalReferenceOperation local => (ISymbol)local.Local,
+                        IParameterReferenceOperation parameter => parameter.Parameter,
+                        IFieldReferenceOperation field => field.Field,
+                        IPropertyReferenceOperation property => property.Property,
+                        _ => null,
+                    };
+                    return DeclaredType(compilation, assignment.Target).Type is { } assigned
+                        ? (assigned, symbol is null ? null : TypeSyntaxOf(symbol))
+                        : null;
+                case IArgumentOperation
+                {
+                    Parameter: { RefKind: RefKind.None or RefKind.In } parameter
+                }:
+                    return FromSymbol(parameter);
+                case IReturnOperation @return:
+                    return ReturnTarget(@return) is { Type: { } returned } target
+                        ? (returned, target.Syntax)
+                        : null;
+                case ITupleOperation tuple
+                    when tuple.Parent is not IDeconstructionAssignmentOperation:
+                    var index = tuple.Elements.IndexOf(current);
+                    if (
+                        NestedTarget(compilation, tuple) is not var (tupleType, tupleSyntax)
+                        || tupleType is not INamedTypeSymbol { IsTupleType: true } named
+                        || index < 0
+                        || index >= named.TupleElements.Length
+                    )
+                    {
+                        return null;
+                    }
+
+                    return (
+                        named.TupleElements[index].Type,
+                        tupleSyntax is TupleTypeSyntax tupleTypeSyntax
+                            ? tupleTypeSyntax.Elements[index].Type
+                            : null
+                    );
+                case ICollectionExpressionOperation collection
+                    when collection.Type is { } collectionType
+                        && ElementOf(collectionType) is { } element:
+                    var collectionSyntax = NestedTarget(compilation, collection)?.Syntax;
+                    return (
+                        element.Type,
+                        collectionSyntax is ArrayTypeSyntax arraySyntax
+                            ? arraySyntax.ElementType
+                            : SingleTypeArgument(collectionSyntax)
+                    );
+                case IArrayInitializerOperation initializer:
+                    for (IOperation? up = initializer; up is not null; up = up.Parent)
+                    {
+                        if (up is IArrayCreationOperation { Type: IArrayTypeSymbol array } creation)
+                        {
+                            return (
+                                array.ElementType,
+                                creation.Syntax is ArrayCreationExpressionSyntax creationSyntax
+                                    ? creationSyntax.Type.ElementType
+                                    : null
+                            );
+                        }
+                    }
+
+                    return null;
+                case IIsPatternOperation pattern when pattern.Value == current:
+                    return pattern.Pattern switch
+                    {
+                        IDeclarationPatternOperation { MatchedType: { } matched } declaration => (
+                            matched,
+                            (declaration.Syntax as DeclarationPatternSyntax)?.Type
+                        ),
+                        ITypePatternOperation { MatchedType: { } matched } typePattern => (
+                            matched,
+                            (typePattern.Syntax as TypePatternSyntax)?.Type
+                        ),
+                        IRecursivePatternOperation { MatchedType: { } matched } recursive => (
+                            matched,
+                            (recursive.Syntax as RecursivePatternSyntax)?.Type
+                        ),
+                        _ => null,
+                    };
+                default:
+                    return null;
+            }
+        }
+    }
+
+    /// <summary>The type argument of `Task&lt;T&gt;`, `List&lt;T&gt;` and the like, written with or without a namespace.</summary>
+    private static TypeSyntax? SingleTypeArgument(TypeSyntax? syntax) =>
+        syntax switch
+        {
+            GenericNameSyntax { TypeArgumentList.Arguments.Count: 1 } generic => generic
+                .TypeArgumentList
+                .Arguments[0],
+            QualifiedNameSyntax
+            {
+                Right: GenericNameSyntax { TypeArgumentList.Arguments.Count: 1 } generic,
+            } => generic.TypeArgumentList.Arguments[0],
+            _ => null,
+        };
+
+    public static (ITypeSymbol Type, TypeSyntax? Syntax)? FromSymbol(ISymbol? symbol) =>
+        VariableType(symbol) is { } type ? (type, TypeSyntaxOf(symbol!)) : null;
+
+    /// <summary>The type syntax that declares a local, parameter, field or property, or null for var or metadata.</summary>
+    public static TypeSyntax? TypeSyntaxOf(ISymbol symbol)
+    {
+        if (symbol.DeclaringSyntaxReferences.Length != 1)
+        {
+            return null;
+        }
+
+        TypeSyntax? type = symbol.DeclaringSyntaxReferences[0].GetSyntax() switch
+        {
+            VariableDeclaratorSyntax { Parent: VariableDeclarationSyntax declaration } =>
+                declaration.Type,
+            SingleVariableDesignationSyntax { Parent: DeclarationExpressionSyntax declaration } =>
+                declaration.Type,
+            SingleVariableDesignationSyntax { Parent: DeclarationPatternSyntax declaration } =>
+                declaration.Type,
+            ForEachStatementSyntax loop => loop.Type,
+            ParameterSyntax parameter => parameter.Type,
+            PropertyDeclarationSyntax property => property.Type,
+            IndexerDeclarationSyntax indexer => indexer.Type,
+            _ => null,
+        };
+        return type is { IsVar: true } ? null : type;
+    }
+
+    /// <summary>The declared type of a local, parameter, field or property.</summary>
+    public static ITypeSymbol? VariableType(ISymbol? symbol) =>
+        symbol switch
+        {
+            ILocalSymbol local => local.Type,
+            IParameterSymbol parameter => parameter.Type,
+            IFieldSymbol field => field.Type,
+            IPropertySymbol property => property.Type,
+            _ => null,
+        };
 
     /// <summary>Skips implicit conversions and parentheses so the expression that carries the declared type is found.</summary>
     public static IOperation Unwrap(IOperation operation)
@@ -65,7 +419,7 @@ internal static class OperationHelpers
     /// initializer is traced to the origin of that initializer, unless the local is assigned again later.
     /// </summary>
     public static ISymbol? OriginSymbol(IOperation operation) =>
-        OriginSymbol(operation, new HashSet<ILocalSymbol>(SymbolEqualityComparer.Default));
+        OriginSymbol(operation, [with(SymbolEqualityComparer.Default)]);
 
     private static ISymbol? OriginSymbol(IOperation operation, HashSet<ILocalSymbol> visited) =>
         Unwrap(operation) switch
@@ -94,27 +448,72 @@ internal static class OperationHelpers
             || local.DeclaringSyntaxReferences[0].GetSyntax()
                 is not VariableDeclaratorSyntax { Initializer.Value: { } value } declarator
         )
-            return null;
-
-        var scope = declarator.Ancestors().OfType<MemberDeclarationSyntax>().FirstOrDefault();
-        if (scope is null)
-            return null;
-        foreach (var name in scope.DescendantNodes().OfType<IdentifierNameSyntax>())
         {
-            if (
-                name.Identifier.ValueText != local.Name
-                || model.GetOperation(name) is not ILocalReferenceOperation other
-                || !SymbolEqualityComparer.Default.Equals(other.Local, local)
-            )
-                continue;
-            if (IsWrittenTo(other))
-                return null;
+            return null;
+        }
+
+        if (References(local, declarator, model).Any(IsWrittenTo))
+        {
+            return null;
         }
 
         // C# binds parentheses away, so there is no operation for them.
         while (value is ParenthesizedExpressionSyntax parenthesized)
+        {
             value = parenthesized.Expression;
+        }
+
         return model.GetOperation(value);
+    }
+
+    /// <summary>
+    /// True when a variable that receives an oblivious value where it is declared is never written again and every
+    /// read of it handles null (see <see cref="IsNullHandled"/>). A variable that is never read is handled too.
+    /// </summary>
+    public static bool IsNullHandledVariable(
+        ISymbol variable,
+        SyntaxNode declaration,
+        SemanticModel model
+    ) =>
+        References(variable, declaration, model)
+            .All(reference =>
+                IsInsideNameof(reference) || (!IsWrittenTo(reference) && IsNullHandled(reference))
+            );
+
+    /// <summary>The references to a local or parameter within the member (or top-level program) that declares it.</summary>
+    private static IEnumerable<IOperation> References(
+        ISymbol variable,
+        SyntaxNode declaration,
+        SemanticModel model
+    )
+    {
+        var member = declaration.Ancestors().OfType<MemberDeclarationSyntax>().FirstOrDefault();
+        // Top-level statements are separate members that share their locals.
+        SyntaxNode? scope = member is GlobalStatementSyntax ? member.Parent : member;
+        if (scope is null)
+        {
+            yield break;
+        }
+
+        foreach (var name in scope.DescendantNodes().OfType<IdentifierNameSyntax>())
+        {
+            if (name.Identifier.ValueText != variable.Name)
+            {
+                continue;
+            }
+
+            var operation = model.GetOperation(name);
+            var symbol = operation switch
+            {
+                ILocalReferenceOperation local => (ISymbol)local.Local,
+                IParameterReferenceOperation parameter => parameter.Parameter,
+                _ => null,
+            };
+            if (SymbolEqualityComparer.Default.Equals(symbol, variable))
+            {
+                yield return operation!;
+            }
+        }
     }
 
     private static bool IsWrittenTo(IOperation reference) =>
@@ -167,10 +566,17 @@ internal static class OperationHelpers
             foreach (var getAwaiter in type.GetMembers("GetAwaiter"))
             {
                 if (getAwaiter is not IMethodSymbol { Parameters.Length: 0 } method)
+                {
                     continue;
+                }
+
                 foreach (var getResult in method.ReturnType.GetMembers("GetResult"))
+                {
                     if (getResult is IMethodSymbol { Parameters.Length: 0 } result)
+                    {
                         return (result.ReturnType, result.ReturnNullableAnnotation);
+                    }
+                }
             }
         }
 
@@ -186,9 +592,14 @@ internal static class OperationHelpers
     {
         var (collection, _) = DeclaredType(compilation, loop.Collection);
         if (collection is IArrayTypeSymbol array)
+        {
             return (array.ElementType, array.ElementNullableAnnotation);
+        }
+
         if (loop.Syntax is not CommonForEachStatementSyntax syntax)
+        {
             return default;
+        }
 
         // The compiler binds the enumerator on the substituted type. When resolving oblivious type
         // parameters changed the collection type, its Current property is stale, so look it up again.
@@ -200,7 +611,9 @@ internal static class OperationHelpers
             )
             && ElementOf(collection, loop.IsAsynchronous) is { } resolved
         )
+        {
             return resolved;
+        }
 
         var info = model.GetForEachStatementInfo(syntax);
         return info.CurrentProperty is { } current
@@ -215,49 +628,64 @@ internal static class OperationHelpers
     )
     {
         if (collection is IArrayTypeSymbol array)
+        {
             return (array.ElementType, array.ElementNullableAnnotation);
+        }
 
         var getEnumerator = FindMethod(
             collection,
             isAsync ? "GetAsyncEnumerator" : "GetEnumerator"
         );
-        if (
+        return
             getEnumerator is null
             || FindProperty(getEnumerator.ReturnType, "Current") is not { } current
-        )
-            return null;
-        return (current.Type, current.NullableAnnotation);
+            ? null
+            : (current.Type, current.NullableAnnotation);
     }
 
     private static IMethodSymbol? FindMethod(ITypeSymbol type, string name)
     {
         foreach (var candidate in Hierarchy(type))
-        foreach (var member in candidate.GetMembers(name))
-            if (
-                member
-                    is IMethodSymbol
-                    {
-                        IsStatic: false,
-                        DeclaredAccessibility: Accessibility.Public
-                    } method
-                && method.Parameters.All(p => p.IsOptional)
-            )
-                return method;
+        {
+            foreach (var member in candidate.GetMembers(name))
+            {
+                if (
+                    member
+                        is IMethodSymbol
+                        {
+                            IsStatic: false,
+                            DeclaredAccessibility: Accessibility.Public
+                        } method
+                    && method.Parameters.All(p => p.IsOptional)
+                )
+                {
+                    return method;
+                }
+            }
+        }
+
         return null;
     }
 
     private static IPropertySymbol? FindProperty(ITypeSymbol type, string name)
     {
         foreach (var candidate in Hierarchy(type))
-        foreach (var member in candidate.GetMembers(name))
-            if (
-                member is IPropertySymbol
+        {
+            foreach (var member in candidate.GetMembers(name))
+            {
+                if (
+                    member is IPropertySymbol
+                    {
+                        IsStatic: false,
+                        DeclaredAccessibility: Accessibility.Public
+                    } property
+                )
                 {
-                    IsStatic: false,
-                    DeclaredAccessibility: Accessibility.Public
-                } property
-            )
-                return property;
+                    return property;
+                }
+            }
+        }
+
         return null;
     }
 
@@ -265,20 +693,15 @@ internal static class OperationHelpers
     private static IEnumerable<ITypeSymbol> Hierarchy(ITypeSymbol type)
     {
         for (var current = type; current is not null; current = current.BaseType)
-            yield return current;
-        foreach (var contract in type.AllInterfaces.OrderBy(i => i.TypeArguments.Length == 0))
-            yield return contract;
-    }
-
-    public static NullableAnnotation DeclaredNullableAnnotation(ISymbol symbol) =>
-        symbol switch
         {
-            ILocalSymbol local => local.NullableAnnotation,
-            IFieldSymbol field => field.NullableAnnotation,
-            IPropertySymbol property => property.NullableAnnotation,
-            IParameterSymbol parameter => parameter.NullableAnnotation,
-            _ => NullableAnnotation.None,
-        };
+            yield return current;
+        }
+
+        foreach (var contract in type.AllInterfaces.OrderBy(i => i.TypeArguments.Length == 0))
+        {
+            yield return contract;
+        }
+    }
 
     public static Location? ForEachVariableLocation(CommonForEachStatementSyntax syntax) =>
         syntax switch

@@ -5,12 +5,18 @@
     <TargetFramework>net11.0-windows</TargetFramework>
     <RootNamespace>DirectoryServicesSample</RootNamespace>
     <!-- The sample exists to show the NOA warnings, so they must not fail the build. -->
-    <WarningsNotAsErrors>$(WarningsNotAsErrors);NOA001;NOA002;NOA003;NOA004;NOA005;NOA006;NOA007</WarningsNotAsErrors>
+    <WarningsNotAsErrors>$(WarningsNotAsErrors);NOA001;NOA002;NOA003;NOA004;NOA005;NOA006;NOA007;NOA009</WarningsNotAsErrors>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="System.DirectoryServices.AccountManagement" />
     <ProjectReference
       Include="..\..\src\Randactyl.NullObliviousAnalyzer\Randactyl.NullObliviousAnalyzer.csproj"
+      OutputItemType="Analyzer"
+      ReferenceOutputAssembly="false"
+    />
+    <!-- The code fixes are used by the IDE only; the build does not need them. -->
+    <ProjectReference
+      Include="..\..\src\Randactyl.NullObliviousAnalyzer.CodeFixes\Randactyl.NullObliviousAnalyzer.CodeFixes.csproj"
       OutputItemType="Analyzer"
       ReferenceOutputAssembly="false"
     />
